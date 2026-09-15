@@ -1,0 +1,19 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# Pipeline working directories & assets
+_INPUT/
+_OUTPUT/
+_PACKAGE/
+_DIAGNOSTICS/
+
+# Cache files
+.build_cache.json
+
+# OS artifacts
+.DS_Store
+Thumbs.db

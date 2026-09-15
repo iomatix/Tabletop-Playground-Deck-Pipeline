@@ -1,0 +1,70 @@
+{
+  "default_profile": "story_engine_standard",
+  "dpi": 200,
+  "export_format": "png",
+  "dirs": {
+    "input": "_INPUT",
+    "output": "_OUTPUT",
+    "diagnostics": "_DIAGNOSTICS"
+  },
+  "ttpg": {
+    "package_name": "The Story Engine Universe",
+    "output_dir": "_PACKAGE"
+  },
+  "rules": [
+    {
+      "pattern": "*_HQ Cards.pdf",
+      "profile": "story_engine_standard",
+      "strip_suffix": "_HQ Cards"
+    },
+    {
+      "pattern": "*Guidebook*.pdf",
+      "profile": "full_page_duplex",
+      "strip_suffix": ""
+    }
+  ],
+  "profiles": {
+    "story_engine_standard": {
+      "description": "Standard US Letter (2x3, cards 3x3 inches, gutters 18pt)",
+      "duplex_flip": "horizontal",
+      "grid": {
+        "cols": 2,
+        "rows": 3,
+        "card_width_pt": 216.0,
+        "card_height_pt": 216.0,
+        "origin_x_pt": 80.95,
+        "origin_y_pt": 54.0,
+        "gutter_x_pt": 18.0,
+        "gutter_y_pt": 18.0
+      }
+    },
+    "story_engine_eco": {
+      "description": "Eco US Letter (3x4, cards 2.5x2.5 inches, zero-gutter)",
+      "duplex_flip": "horizontal",
+      "grid": {
+        "cols": 3,
+        "rows": 4,
+        "card_width_pt": 180.0,
+        "card_height_pt": 180.0,
+        "origin_x_pt": 36.0,
+        "origin_y_pt": 36.0,
+        "gutter_x_pt": 0.0,
+        "gutter_y_pt": 0.0
+      }
+    },
+    "full_page_duplex": {
+      "description": "Guidebook / Full Page (1x1)",
+      "duplex_flip": "none",
+      "grid": {
+        "cols": 1,
+        "rows": 1,
+        "card_width_pt": 612.0,
+        "card_height_pt": 792.0,
+        "origin_x_pt": 0.0,
+        "origin_y_pt": 0.0,
+        "gutter_x_pt": 0.0,
+        "gutter_y_pt": 0.0
+      }
+    }
+  }
+}
