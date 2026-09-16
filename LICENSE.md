@@ -1,6 +1,6 @@
 CUSTOM SOURCE-AVAILABLE & NON-COMMERCIAL LICENSE
 
-Copyright (c) 2026 [Your Full Name or GitHub Handle]. All rights reserved.
+Copyright (c) 2026 iomatix - Mateusz Wypchlak. All rights reserved.
 
 This software and associated documentation files (the "Software") are the intellectual 
 property of the Author. This repository serves as the single canonical upstream source 
