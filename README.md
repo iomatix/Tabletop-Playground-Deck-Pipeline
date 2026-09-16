@@ -18,7 +18,7 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 ```
 
 > [!NOTE]
-> In the extraction path `card_###_[front|back].png`, `###` denotes the **1-based sequential card index** within that specific deck folder (e.g., `card_001_front.png` to `card_120_front.png`), not a physical page number.
+> In the extraction path `card_###_[front|back].png`, `###` denotes the **1-based sequential card index** within that specific deck folder (padded to a minimum of 3 digits, e.g., `card_001_front.png`, dynamically expanding to `card_1000_front.png` for decks $\ge 1000$ items), not a physical page number.
 > 
 > 
 

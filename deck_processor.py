@@ -231,6 +231,10 @@ class PdfDeckExtractor:
         card_counter = 1
         sheet_pairs = (total_pages + 1) // 2
 
+        # Dynamically calculate zero-padding width (minimum 3 digits, expands for >= 1000 items)
+        expected_total_cards = sheet_pairs * (1 if is_document else grid.cols * grid.rows)
+        pad_width = max(3, len(str(expected_total_cards)))
+
         for pair_idx in range(sheet_pairs):
             front_idx = pair_idx * 2
             back_idx = front_idx + 1
@@ -263,11 +267,11 @@ class PdfDeckExtractor:
                         back_rect = pymupdf.Rect(bx0, by0, bx0 + grid.card_width_pt, by0 + grid.card_height_pt)
 
                     front_pix = front_page.get_pixmap(matrix=self.matrix, clip=front_rect, alpha=False)
-                    front_pix.save(deck_output_dir / f"card_{card_counter:03d}_front.png")
+                    front_pix.save(deck_output_dir / f"card_{card_counter:0{pad_width}d}_front.png")
 
                     if back_page:
                         back_pix = back_page.get_pixmap(matrix=self.matrix, clip=back_rect, alpha=False)
-                        back_pix.save(deck_output_dir / f"card_{card_counter:03d}_back.png")
+                        back_pix.save(deck_output_dir / f"card_{card_counter:0{pad_width}d}_back.png")
                     else:
                         target_w = front_rect.width
                         target_h = front_rect.height
@@ -281,7 +285,7 @@ class PdfDeckExtractor:
                             ),
                         )
                         blank_pix.clear_with(255)
-                        blank_pix.save(deck_output_dir / f"card_{card_counter:03d}_back.png")
+                        blank_pix.save(deck_output_dir / f"card_{card_counter:0{pad_width}d}_back.png")
 
                     card_counter += 1
 
