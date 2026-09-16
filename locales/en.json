@@ -34,6 +34,8 @@
   "diag_lint_passed": "Ruff linter passed! No code style or syntax issues found.",
   "diag_notice_desc": "Batch PDF integration tests require source documents placed in `_INPUT/`. If the directory is missing or empty, batch tests will be skipped automatically.",
   "diag_notice_title": "Input Assets Notice:",
+  "diag_standalone_notice_desc": "Pytest and Ruff are developer CLI tools and are omitted from the standalone distribution. To run automated test suites, use the source repository (`python gui_app.py`).",
+  "diag_standalone_notice_title": "Standalone Executable Notice",
   "diag_status_failed": "Tests failed! Check the execution console log below.",
   "diag_status_linting": "Running static analysis (ruff)...",
   "diag_status_passed": "All tests passed successfully!",

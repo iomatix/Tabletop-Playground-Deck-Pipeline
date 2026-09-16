@@ -5,6 +5,7 @@ System Diagnostics, Test Runner, and Static Linter View.
 from __future__ import annotations
 
 import asyncio
+import shutil
 import sys
 from typing import Callable, Optional
 
@@ -14,17 +15,31 @@ from app.state import BASE_DIR, state, t
 
 
 def create_diagnostics_view(lang_selector_ref_getter: Callable[[], Optional[ui.select]]) -> None:
+    is_frozen = getattr(sys, "frozen", False)
+    pytest_bin = shutil.which("pytest")
+    ruff_bin = shutil.which("ruff")
+
+    can_run_pytest = (not is_frozen) or (pytest_bin is not None)
+    can_run_ruff = (not is_frozen) or (ruff_bin is not None)
+
     ui.markdown(f"### {t('diag_title')}")
     ui.markdown(t("diag_desc"))
 
-    with ui.card().classes("w-full bg-blue-grey-1 border-l-4 border-primary q-pa-sm q-my-sm"):
-        ui.label(t("diag_notice_title")).classes("font-bold text-caption text-primary")
-        ui.markdown(t("diag_notice_desc")).classes("text-caption text-grey-8")
+    if is_frozen and (not can_run_pytest or not can_run_ruff):
+        with ui.card().classes("w-full bg-amber-1 border-l-4 border-warning q-pa-sm q-my-sm"):
+            ui.label(t("diag_standalone_notice_title")).classes("font-bold text-caption text-warning")
+            ui.markdown(t("diag_standalone_notice_desc")).classes("text-caption text-grey-8")
+    else:
+        with ui.card().classes("w-full bg-blue-grey-1 border-l-4 border-primary q-pa-sm q-my-sm"):
+            ui.label(t("diag_notice_title")).classes("font-bold text-caption text-primary")
+            ui.markdown(t("diag_notice_desc")).classes("text-caption text-grey-8")
 
     status_badge = ui.badge(t("diag_status_ready"), color="grey-7").classes("text-body2 q-py-xs q-px-sm")
     log_console = ui.log().classes("w-full h-80 bg-grey-10 text-white font-mono text-caption q-mt-sm")
 
-    all_buttons: list[ui.button] = []
+    test_buttons: list[ui.button] = []
+    lint_buttons: list[ui.button] = []
+    sync_buttons: list[ui.button] = []
 
     def set_busy_state(is_busy: bool, badge_text: str = "", badge_color: str = "grey-7") -> None:
         state.is_busy = is_busy
@@ -35,7 +50,19 @@ def create_diagnostics_view(lang_selector_ref_getter: Callable[[], Optional[ui.s
             else:
                 selector.enable()
 
-        for btn in all_buttons:
+        for btn in test_buttons:
+            if is_busy or not can_run_pytest:
+                btn.disable()
+            else:
+                btn.enable()
+
+        for btn in lint_buttons:
+            if is_busy or not can_run_ruff:
+                btn.disable()
+            else:
+                btn.enable()
+
+        for btn in sync_buttons:
             if is_busy:
                 btn.disable()
             else:
@@ -46,13 +73,16 @@ def create_diagnostics_view(lang_selector_ref_getter: Callable[[], Optional[ui.s
             status_badge.props(f"color={badge_color}")
 
     async def execute_pytest(extra_args: list[str]) -> None:
-        if state.is_busy:
+        if state.is_busy or not can_run_pytest:
             return
 
         set_busy_state(True, t("diag_status_running"), "blue-7")
         log_console.clear()
 
-        cmd = [sys.executable, "-u", "-m", "pytest", "-v"] + extra_args
+        if is_frozen and pytest_bin:
+            cmd = [pytest_bin, "-v"] + extra_args
+        else:
+            cmd = [sys.executable, "-u", "-m", "pytest", "-v"] + extra_args
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -80,14 +110,17 @@ def create_diagnostics_view(lang_selector_ref_getter: Callable[[], Optional[ui.s
             set_busy_state(False, t("diag_status_failed"), "negative")
 
     async def execute_ruff() -> None:
-        if state.is_busy:
+        if state.is_busy or not can_run_ruff:
             return
 
         set_busy_state(True, t("diag_status_linting"), "purple-7")
         log_console.clear()
         log_console.push("[START] Executing Ruff static code analysis...")
 
-        cmd = [sys.executable, "-u", "-m", "ruff", "check", "."]
+        if is_frozen and ruff_bin:
+            cmd = [ruff_bin, "check", "."]
+        else:
+            cmd = [sys.executable, "-u", "-m", "ruff", "check", "."]
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -175,4 +208,14 @@ def create_diagnostics_view(lang_selector_ref_getter: Callable[[], Optional[ui.s
             on_click=run_locale_sync,
         ).props("outline color=grey-8")
 
-        all_buttons.extend([btn_all, btn_fast, btn_install_test, btn_linter, btn_sync])
+        test_buttons.extend([btn_all, btn_fast, btn_install_test])
+        lint_buttons.append(btn_linter)
+        sync_buttons.append(btn_sync)
+
+        if not can_run_pytest:
+            for b in test_buttons:
+                b.disable()
+
+        if not can_run_ruff:
+            for b in lint_buttons:
+                b.disable()

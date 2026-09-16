@@ -34,6 +34,8 @@
   "diag_lint_passed": "Ruff zakończony sukcesem! Brak błędów składni i stylu.",
   "diag_notice_desc": "Testy wsadowe plików PDF wymagają umieszczenia dokumentów źródłowych w katalogu `_INPUT/`. W przypadku braku plików testy wsadowe zostaną bezpiecznie pominięte (SKIPPED).",
   "diag_notice_title": "Informacja o plikach wejściowych:",
+  "diag_standalone_notice_desc": "Narzędzia Pytest i Ruff są przeznaczone dla deweloperów i nie są dołączone do skompilowanej wersji .exe. Aby uruchomić testy, skorzystaj z repozytorium źródłowego (`python gui_app.py`).",
+  "diag_standalone_notice_title": "Informacja o wersji samodzielnej",
   "diag_status_failed": "Wykryto błędy w testach! Przejrzyj log w konsoli poniżej.",
   "diag_status_linting": "Analiza statyczna kodu (ruff)...",
   "diag_status_passed": "Wszystkie testy zakończone sukcesem!",
