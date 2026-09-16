@@ -258,3 +258,11 @@ python inspect_deck.py "_INPUT/Core/Story_HQ Cards.pdf"
 ```
 
 The script renders a single front/back pair into `_DIAGNOSTICS/precise_card_000_[front|back].png` and reports calculated physical dimensions in centimeters.
+
+### Sub-Pixel Jitter & Dimension Normalization
+Vector rendering from PDF documents at custom DPI values (e.g., 250 DPI with fractional PostScript point offsets) inherently introduces floating-point rasterization jitter ($\pm 1\text{ to } 2\text{ px}$ across different grid rows/columns).
+
+To handle this robustly:
+1. **Statistical Canonical Dimension:** `ttpg_packager.py` evaluates all cards in a deck using statistical mode (`Counter.most_common(1)`) to establish the canonical width and height.
+2. **Strict Tolerance Boundary:** Any card deviating by $\le 2\text{ px}$ (`MAX_JITTER_TOLERANCE_PX`) is automatically normalized to the canonical dimension using high-quality `LANCZOS` resampling during atlas baking.
+3. **Fail-Fast Boundary:** Any deviation exceeding $2\text{ px}$ immediately triggers `[FAIL-FAST]`, halting execution to protect against genuine aspect-ratio corruption, mismatched duplex definitions, or malformed assets.
