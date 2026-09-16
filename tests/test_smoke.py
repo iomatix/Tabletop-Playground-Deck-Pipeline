@@ -6,10 +6,14 @@ without requiring external PDF test assets.
 """
 
 import json
+import sys
 from pathlib import Path
 import pytest
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Ensure project root is discoverable by test runner
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 
 def test_config_integrity():
