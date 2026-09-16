@@ -1,5 +1,9 @@
 # Tabletop Playground (TTPG) Deck Pipeline
 
+[![Platform - Windows](https://img.shields.io/badge/Platform-Windows%20x64-0078D6?logo=windows&logoColor=white)](#choose-your-distribution)
+[![Runtime - Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](#choose-your-distribution)
+[![Release](https://img.shields.io/github/v/release/iomatix/Tabletop-Playground-Deck-Pipeline?color=2ea44f)](https://github.com/iomatix/Tabletop-Playground-Deck-Pipeline/releases/latest)
+
 Automated extraction, texture atlas compilation, and packaging pipeline for custom card decks and guidebooks in **Tabletop Playground** (Unreal Engine).
 
 ```
@@ -63,6 +67,11 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 ---
 
 ## Quick Start
+
+### Choose Your Distribution
+
+* **Standalone Executable (`TTPG-Deck-Pipeline-Windows.zip`)**: Ready out of the box for Windows x64. Includes all GUI dependencies, native OS integration, and an isolated runtime. **Zero Python or pip installation required.**
+* **Portable Source (`TTPG-Deck-Pipeline-Source.zip`)**: Lightweight, cross-platform Python distribution. Requires Python 3.10+ in a standard environment.
 
 ### 1. Requirements & Installation
 
