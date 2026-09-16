@@ -35,8 +35,8 @@ jobs:
         run: |
           pytest -v tests/
 
-  build-windows-exe:
-    name: Build Standalone Windows Executable
+  build-release-artifacts:
+    name: Build Release Artifacts (Windows EXE & Source ZIP)
     needs: test
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: windows-latest
@@ -66,13 +66,19 @@ jobs:
             --collect-all nicegui `
             gui_app.py
 
-      - name: Compress Build Artifact
+      - name: Compress Build Artifacts
         run: |
+          # 1. Standalone Windows executable
           Compress-Archive -Path dist/TTPG-Deck-Pipeline -DestinationPath dist/TTPG-Deck-Pipeline-Windows.zip
 
-      - name: Upload Release Asset
+          # 2. Source code package (clean, portable)
+          git archive --format=zip --output=dist/TTPG-Deck-Pipeline-Source.zip HEAD
+
+      - name: Upload Release Assets
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/TTPG-Deck-Pipeline-Windows.zip
+          files: |
+            dist/TTPG-Deck-Pipeline-Windows.zip
+            dist/TTPG-Deck-Pipeline-Source.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
