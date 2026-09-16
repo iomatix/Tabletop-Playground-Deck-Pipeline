@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-# Ensure project root is discoverable by test runner
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
@@ -38,11 +37,19 @@ def test_physics_formula():
 
 
 def test_module_syntax_imports():
-    """Ensure core pipeline modules import cleanly without syntax or environment errors."""
+    """Ensure core and modular pipeline modules import cleanly without errors."""
     import deck_processor
     import ttpg_packager
     import inspect_deck
+    import app.state
+    import app.pdf_analyzer
+    import app.views.calibrator
+    import app.views.wizard
 
     assert hasattr(deck_processor, "PdfDeckExtractor")
     assert hasattr(ttpg_packager, "PackageOrchestrator")
     assert hasattr(inspect_deck, "DeckInspector")
+    assert hasattr(app.state, "LocaleManager")
+    assert hasattr(app.pdf_analyzer, "PdfGridAnalyzer")
+    assert hasattr(app.views.calibrator, "create_calibrator_view")
+    assert hasattr(app.views.wizard, "create_pipeline_view")

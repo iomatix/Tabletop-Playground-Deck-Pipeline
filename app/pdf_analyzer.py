@@ -1,5 +1,5 @@
 """
-PDF Vector Inspection, 1D Differential Grid Decomposition,
+PDF Vector & Raster Inspection, 1D Differential Grid Decomposition,
 and Click-Through SVG Overlay Generator.
 """
 
@@ -9,7 +9,7 @@ import base64
 from collections import Counter
 from pathlib import Path
 from statistics import median
-from typing import Any, Optional
+from typing import Any
 
 import pymupdf
 
@@ -56,10 +56,9 @@ def _decompose_axis(
     if not card_deltas:
         return 1, page_dimension, 0.0, 0.0
 
-    # Cluster deltas and select the dominant (most frequent) bucket
+    # Cluster deltas and select the dominant bucket
     raw_clusters = _cluster_1d(card_deltas, tolerance=3.0)
-    
-    # Map raw deltas to closest cluster centroid to establish cluster sizes
+
     def find_nearest_centroid(val: float) -> float:
         return min(raw_clusters, key=lambda c: abs(c - val))
 
@@ -69,7 +68,9 @@ def _decompose_axis(
     gutter = 0.0
     if gutter_deltas:
         gutter_clusters = _cluster_1d(gutter_deltas, tolerance=2.0)
-        gutter_counter = Counter(min(gutter_clusters, key=lambda g: abs(g - d)) for d in gutter_deltas)
+        gutter_counter = Counter(
+            min(gutter_clusters, key=lambda g: abs(g - d)) for d in gutter_deltas
+        )
         gutter = gutter_counter.most_common(1)[0][0]
 
     origin = coords[0]
@@ -77,7 +78,7 @@ def _decompose_axis(
 
 
 class PdfGridAnalyzer:
-    """Extracts vector cut lines, dimensions, and raster previews from PDF files with Fail-Fast resilience."""
+    """Extracts cut lines, image tiles, dimensions, and raster previews from PDF files."""
 
     @staticmethod
     def detect_grid(pdf_path: Path) -> dict[str, Any]:
@@ -119,9 +120,7 @@ class PdfGridAnalyzer:
                     for marker in ("guidebook", "instruction", "manual", "rulebook", "rules")
                 )
 
-                drawings = page.get_drawings()
-
-                if (total_pages <= 2 and has_heavy_text) or is_named_doc or len(drawings) < 4:
+                if (total_pages <= 2 and has_heavy_text) or is_named_doc:
                     return {
                         **default_fallback,
                         "card_width_pt": page_w,
@@ -130,10 +129,11 @@ class PdfGridAnalyzer:
                         "is_valid": True,
                     }
 
-                # Extract Vector Cut Candidates
                 xs: list[float] = []
                 ys: list[float] = []
 
+                # Strategy A: Vector drawings / crop marks
+                drawings = page.get_drawings()
                 for d in drawings:
                     rect = d.get("rect")
                     if rect:
@@ -151,6 +151,18 @@ class PdfGridAnalyzer:
                                 xs.append(p1.x)
                             elif abs(p1.y - p2.y) <= 1.0 and 5.0 < p1.y < (page_h - 5.0):
                                 ys.append(p1.y)
+
+                # Strategy B: Raster image tiles (for PDFs without cut vectors)
+                if len(xs) < 2 or len(ys) < 2:
+                    image_info = page.get_image_info(xrefs=True)
+                    if len(image_info) >= 4:
+                        for img in image_info:
+                            bbox = img.get("bbox")
+                            if bbox:
+                                x0, y0, x1, y1 = bbox
+                                if (x1 - x0) >= 50.0 and (y1 - y0) >= 50.0:
+                                    xs.extend([x0, x1])
+                                    ys.extend([y0, y1])
 
                 clustered_xs = _cluster_1d(xs, tolerance=2.0)
                 clustered_ys = _cluster_1d(ys, tolerance=2.0)
