@@ -27,6 +27,8 @@
     "story_engine_standard": {
       "description": "Standard US Letter (2x3, cards 3x3 inches, gutters 18pt)",
       "duplex_flip": "horizontal",
+      "model": "Rounded",
+      "thickness_cm": 0.05,
       "grid": {
         "cols": 2,
         "rows": 3,
@@ -41,6 +43,8 @@
     "story_engine_eco": {
       "description": "Eco US Letter (3x4, cards 2.5x2.5 inches, zero-gutter)",
       "duplex_flip": "horizontal",
+      "model": "Rounded",
+      "thickness_cm": 0.05,
       "grid": {
         "cols": 3,
         "rows": 4,
@@ -55,6 +59,8 @@
     "full_page_duplex": {
       "description": "Guidebook / Full Page (1x1)",
       "duplex_flip": "none",
+      "model": "Square",
+      "thickness_cm": 0.03,
       "grid": {
         "cols": 1,
         "rows": 1,

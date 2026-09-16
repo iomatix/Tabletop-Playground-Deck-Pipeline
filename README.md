@@ -1,72 +1,121 @@
-# Deck Processor & TTPG Mod Packager
+# Tabletop Playground (TTPG) Deck Pipeline
 
-An automated, config-driven Python pipeline designed to extract cards and guidebooks from multi-page print-and-play PDF sheets (*The Story Engine*, *Deck of Worlds*, and their expansions) and compile them directly into native mod packages for **Tabletop Playground (TTPG)**.
+Automated extraction, texture atlas compilation, and packaging pipeline for custom card decks and guidebooks in **Tabletop Playground** (Unreal Engine).
 
-The project provides both headless CLI scripts for batch execution and a browser-based GUI built with NiceGUI featuring visual grid calibration and one-click deployment.
-
----
-
-## Key Features & Architecture
-
-* **Separation of Concerns (SoC) & Strict Whitelisting:** Execution logic is fully decoupled from card geometry and folder paths. Only PDFs matching declarative patterns in `config.json` are processed; unrelated helper sheets or loose files are safely skipped (`[IGNORE]`).
-* **Vector-Accurate Clipping (PyMuPDF):** Point-exact coordinates (`pt`) are passed straight to PyMuPDF's underlying C++ engine (`page.get_pixmap(clip=...)`). This eliminates redundant raster allocations, guarantees sub-pixel sharpness, and cuts execution times.
-* **Smart Page Classification & Dynamic Framing:** Real card decks enforce duplex page parity validation (Fail-Fast). Single-page documents and multi-page rulebooks dynamically adapt to portrait/landscape geometry with blank back-cover fallbacks for odd-numbered page sequences.
-* **Atlas Generation & Unreal Engine Optimization:** `ttpg_packager.py` stitches card tiles into power-of-two card sheets (up to $10 \times 10$ matrices with an 8192 px ceiling). Generates native `<GUID>Card.json` templates with physical properties:
-* Standard Cards: $7.62 \times 7.62\text{ cm}$, thickness $0.05\text{ cm}$, `"Rounded"` model.
-* Guidebooks: $21.59 \times 27.94\text{ cm}$ (or dynamic aspect ratio), thickness $0.04\text{ cm}$, `"Square"` model.
-* 1:1 Duplex Map: Configured with `"BackIndex": -3` for direct front-to-back index association.
-
-
-* **Persistent Visual Web GUI:** Built-in NiceGUI frontend featuring:
-* Non-blocking background workers with unified in-memory log streaming.
-* Internationalization (`en` / `pl`).
-* Interactive SVG grid calibrator with crop-mark auto-detection and preset loading.
-* Direct one-click package installation into `%LOCALAPPDATA%\TabletopPlayground\Packages`.
-
-
-
----
-
-## Directory Layout
-
-```text
-.
-├── config.json                 # Global configuration: presets, rules, paths, TTPG manifest
-├── deck_processor.py           # Backend: Vector extraction of cards and books from PDFs
-├── ttpg_packager.py            # Backend: Card sheet atlas compilation and TTPG JSON generator
-├── gui_app.py                  # Frontend: NiceGUI web interface and grid calibrator
-├── locales/                    # External language files (en.json, pl.json)
-│   ├── en.json
-│   └── pl.json
-├── .build_cache.json           # SHA-256 state tracking for incremental, idempotent builds
-│
-├── _INPUT/                     # Source PDF files and optional local deck configs
-│   ├── Story Engine Deck/
-│   │   └── Main Deck_HQ Cards.pdf
-│   └── Deck of Worlds/
-│
-├── _OUTPUT/                    # Extracted raw card pairs (card_###_front.png, card_###_back.png)
-│   └── Story Engine Deck/
-│
-└── _PACKAGE/                   # Compiled TTPG mod directory
-    └── The Story Engine Universe/
-        ├── Manifest.json       # Mod package header with generated package GUID
-        ├── Textures/           # Compiled card sheets (*_front.png, *_back.png)
-        └── Templates/          # TTPG physical card and deck templates (<GUID>Card.json)
+```
+   [ Source PDFs ]               _INPUT/
+          │
+          ▼  (deck_processor.py / PyMuPDF)
+   [ Card Pairs ]                _OUTPUT/<Universe>/<Deck>/card_###_[front|back].png
+          │
+          ▼  (ttpg_packager.py / Pillow)
+   [ Texture Atlases ]           _PACKAGE/<Name>/Textures/*.png  (Max 8192x8192 px)
+   [ Unified JSON Templates ]    _PACKAGE/<Name>/Templates/*Card.json (Multi-sheet)
+          │
+          ▼  (Direct Install / gui_app.py)
+   [ Tabletop Playground ]       %LOCALAPPDATA%\TabletopPlayground\Packages\
 
 ```
 
 ---
 
-## Configuration (`config.json`)
+## Key Features
 
-The configuration controls directories, target DPI, rule patterns, and grid presets:
+* **Deterministic Physics (SoC):** Card dimensions (`Width`, `Height`) are calculated directly from pixel dimensions and configured DPI using $size_{cm} = \frac{pixels}{dpi} \times 2.54$. No hardcoded magic dimensions.
+* **Native Multi-Sheet Decks:** Tallies exceeding texture boundaries (100 cards or 8192 px) are compiled into a single unified TTPG Card template using `ExtraFrontTextures` and `ExtraBackTextures`, preventing fragmented deck spawns in-game.
+* **Vector-Accurate Extraction:** Direct PDF clipping via PyMuPDF matrix scaling without intermediate full-page rasterization.
+
+
+* **Hierarchical Overrides:** Local `deck.json` files override global `config.json` rules seamlessly at any directory depth.
+* **Fail-Fast Engineering:** Strict assertions enforce dimension consistency, duplex pairing, and page-count integrity before allocating textures.
+
+
+* **Visual Calibrator UI:** Built-in NiceGUI dashboard with SVG alignment overlays, auto-detection of crop marks, and one-click package installation.
+
+
+
+---
+
+## File Architecture
+
+| File | Role | Execution |
+| --- | --- | --- |
+| `gui_app.py` | Complete desktop dashboard with 4-step wizard and live visual calibration.
+
+ | `python gui_app.py` (or `run_app.bat`)
+
+ |
+| `deck_processor.py` | Vector extraction engine. Renders card pairs from PDF according to grid profiles.
+
+ | `python deck_processor.py` |
+| `ttpg_packager.py` | Compiles card pairs into atlases and generates unified TTPG `<GUID>Card.json` templates. | `python ttpg_packager.py` |
+| `inspect_deck.py` | Fast diagnostic CLI. Crops a single card pair to verify cut math and duplex alignment.
+
+ | `python inspect_deck.py [optional_pdf]` |
+| `config.json` | Declarative project schema: paths, DPI, match rules, and preset grid definitions.
+
+ | Loaded at runtime |
+| `deck.json` | *(Optional)* Local folder override for custom physics, metadata, or grid offsets. | Merged hierarchically |
+
+---
+
+## Quick Start
+
+### 1. Requirements & Installation
+
+Python 3.10+ is required. Install required dependencies:
+
+```bash
+pip install pymupdf pillow nicegui
+
+```
+
+(Or double-click `run_app.bat` on Windows to check and launch automatically).
+
+### 2. Add Source PDFs
+
+Place your PDF files inside the `_INPUT` directory:
+
+```text
+_INPUT/
+└── Core/
+    ├── Story_HQ Cards.pdf
+    └── Instruction_Guidebook.pdf
+
+```
+
+### 3. Run Pipeline via GUI
+
+```bash
+python gui_app.py
+
+```
+
+Open `http://localhost:8080` in your browser. The interface guides you through:
+
+1. **Configuration:** Set package name and export DPI.
+
+
+2. **Extraction:** Run `deck_processor.py` with real-time log streaming.
+
+
+3. **Packaging:** Run `ttpg_packager.py` to bake texture atlases and card templates.
+
+
+4. **Installation:** Click **Install Directly to TTPG** to copy the mod to your local game directory.
+
+
+
+---
+
+## Configuration Reference (`config.json`)
+
+The global configuration governs default paths, raster DPI, filename matching rules, and grid profiles.
 
 ```json
 {
   "default_profile": "story_engine_standard",
-  "dpi": 200,
-  "export_format": "png",
+  "dpi": 250,
   "dirs": {
     "input": "_INPUT",
     "output": "_OUTPUT",
@@ -83,11 +132,6 @@ The configuration controls directories, target DPI, rule patterns, and grid pres
       "strip_suffix": "_HQ Cards"
     },
     {
-      "pattern": "*_Eco Cards.pdf",
-      "profile": "story_engine_eco",
-      "strip_suffix": "_Eco Cards"
-    },
-    {
       "pattern": "*Guidebook*.pdf",
       "profile": "full_page_duplex",
       "strip_suffix": ""
@@ -95,8 +139,10 @@ The configuration controls directories, target DPI, rule patterns, and grid pres
   ],
   "profiles": {
     "story_engine_standard": {
-      "description": "Standard US Letter 8.5x11, 2x3 cards (3x3 inches), HQ crop-mark margins",
+      "description": "Standard US Letter (2x3, cards 3x3 inches, gutters 18pt)",
       "duplex_flip": "horizontal",
+      "model": "Rounded",
+      "thickness_cm": 0.05,
       "grid": {
         "cols": 2,
         "rows": 3,
@@ -107,107 +153,118 @@ The configuration controls directories, target DPI, rule patterns, and grid pres
         "gutter_x_pt": 18.0,
         "gutter_y_pt": 18.0
       }
-    },
-    "story_engine_eco": {
-      "description": "Eco US Letter 8.5x11, 3x4 cards (2.5x2.5 inches), zero-gutter layout",
-      "duplex_flip": "horizontal",
-      "grid": {
-        "cols": 3,
-        "rows": 4,
-        "card_width_pt": 180.0,
-        "card_height_pt": 180.0,
-        "origin_x_pt": 36.0,
-        "origin_y_pt": 36.0,
-        "gutter_x_pt": 0.0,
-        "gutter_y_pt": 0.0
-      }
-    },
-    "full_page_duplex": {
-      "description": "Full Page US Letter / A4 document (1x1 duplex)",
-      "duplex_flip": "none",
-      "grid": {
-        "cols": 1,
-        "rows": 1,
-        "card_width_pt": 612.0,
-        "card_height_pt": 792.0,
-        "origin_x_pt": 0.0,
-        "origin_y_pt": 0.0,
-        "gutter_x_pt": 0.0,
-        "gutter_y_pt": 0.0
-      }
     }
   }
 }
 
 ```
 
+### Profiles Breakdown
+
+* **`model`**: `"Rounded"` (standard playing card) or `"Square"` (tiles, manuals, square boards).
+* **`thickness_cm`**: Card thickness in centimeters (default: `0.05` for cards, `0.03` for guidebooks).
+* **`duplex_flip`**:
+* `"horizontal"`: Back side columns are mirrored (`cols - 1 - col`) for standard short-edge landscape duplex or long-edge portrait duplex.
+
+
+* `"vertical"`: Back side rows are mirrored (`rows - 1 - row`).
+
+
+* `"none"`: Front and back use the exact same coordinates (for single-sided cards or manuals).
+
+
+
+
+* **`grid`**: PDF coordinate geometry measured in PostScript points ($1\text{ pt} = \frac{1}{72}\text{ inch}$):
+
+
+* `cols` / `rows`: Grid count per sheet.
+
+
+* `card_width_pt` / `card_height_pt`: Card cut dimensions.
+
+
+* `origin_x_pt` / `origin_y_pt`: Margin offsets from the bottom/top-left origin.
+
+
+* `gutter_x_pt` / `gutter_y_pt`: Spacing between adjacent cards.
+
+
+
+
+
 ---
 
-## Local Deck Overrides (`deck.json`)
+## Local Overrides (`deck.json`)
 
-To override global grid parameters for a specific expansion, place a `deck.json` file alongside its PDF inside `_INPUT/<Deck Name>/`:
+To override properties for an individual deck without modifying global rules, create a `deck.json` file inside the PDF's directory in `_INPUT`:
+
+```text
+_INPUT/
+└── Expansions/
+    └── MiniCards/
+        ├── deck.json
+        └── Cards.pdf
+
+```
+
+### Supported `deck.json` Schema
 
 ```json
 {
-  "profile": "story_engine_standard",
-  "duplex_flip": "vertical",
+  "profile": "story_engine_eco",
+  "duplex_flip": "horizontal",
+  "card_width_cm": 5.0,
+  "card_height_cm": 5.0,
+  "thickness_cm": 0.06,
+  "model": "Square",
+  "meta": {
+    "universe": "Custom Expansion",
+    "category": "Mini Cards",
+    "deck_name": "Mini Deck",
+    "description": "Custom mini square tokens."
+  },
   "grid_overrides": {
-    "origin_x_pt": 82.0
+    "origin_x_pt": 40.0,
+    "origin_y_pt": 40.0
   }
 }
 
 ```
 
-Unspecified keys inherit from the globally defined base profile.
+*Any field omitted from `deck.json` automatically inherits from the resolved profile and image calculations.*
 
 ---
 
-## Usage
+## Advanced Mechanics
 
-### Method 1: Web Interface (Recommended)
+### Multi-Sheet Unified Templates
 
-1. Launch the NiceGUI dashboard:
-```powershell
-python gui_app.py
+When a deck contains more cards than fit onto a single $8192 \times 8192\text{ px}$ sheet (or exceeds the $10 \times 10$ cell limit), `ttpg_packager.py`:
 
-```
+1. Enforces uniform grid dimensions across all sheets (`cols` $\times$ `rows`).
+2. Generates numbered atlas pairs: `<Deck>_01_front.png`, `<Deck>_01_back.png`, `<Deck>_02_front.png`...
+3. Writes a **single** `<GUID>Card.json` linking `ExtraFrontTextures` and `ExtraBackTextures`.
+4. Sets `BackIndex: -3` for 1:1 unique card back pairing across the entire index range ($0$ to $N - 1$).
 
+### Fail-Fast Validations
 
-2. Navigate to `http://localhost:8080` in your browser.
-3. Follow the 4-step workflow:
-* **Step 1:** Verify directories and mod package name.
-* **Step 2:** Run extraction (`deck_processor.py`).
-* **Step 3:** Compile card sheets and templates (`ttpg_packager.py`).
-* **Step 4:** Click **Install Directly to TTPG** to sync the package to your game installation.
+The pipeline aborts immediately (`sys.exit(1)`) under the following error states:
 
+* Odd page count in duplex card documents (indicates a missing back page or mismatched duplex pairing).
 
 
-### Method 2: Headless Command Line
+* Extracted card pixel dimensions mismatching within the same deck.
+* Card pixel dimensions exceeding GPU limits ($> 8192\text{ px}$).
+* Missing front/back companion pairs during packaging.
 
-```powershell
-# 1. Install dependencies
-pip install pymupdf pillow nicegui
+### Fast Calibration via CLI
 
-# 2. Extract cards from _INPUT/ to _OUTPUT/
-python deck_processor.py
+To quickly preview margins and duplex alignment for a specific PDF before running batch extraction:
 
-# 3. Stitch atlases and compile TTPG mod into _PACKAGE/
-python ttpg_packager.py
+```bash
+python inspect_deck.py "_INPUT/Core/Story_HQ Cards.pdf"
 
 ```
 
----
-
-## Manual TTPG Installation
-
-If not using the web GUI's direct installation button:
-
-1. Locate the compiled mod folder in `_PACKAGE/<Package Name>/`.
-2. Copy the entire folder into:
-```text
-%LOCALAPPDATA%\TabletopPlayground\Packages\
-
-```
-
-
-3. Start **Tabletop Playground**. The physical card decks and guidebook cards will appear in your in-game object library.
+The script renders a single front/back pair into `_DIAGNOSTICS/precise_card_000_[front|back].png` and reports calculated physical dimensions in centimeters.

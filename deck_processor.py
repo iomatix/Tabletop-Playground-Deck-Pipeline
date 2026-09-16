@@ -1,222 +1,307 @@
+"""
+PDF Card Deck Extraction Engine.
+
+Renders vector-based card pages from PDF documents into paired front/back PNG images
+according to declarative grid profiles and duplex binding rules.
+"""
+
+from __future__ import annotations
+
 import hashlib
 import json
-import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Final, Optional
+
 import pymupdf
 
-BASE_DIR = Path(__file__).resolve().parent
-CONFIG_PATH = BASE_DIR / "config.json"
-CACHE_PATH = BASE_DIR / ".build_cache.json"
-
-if not CONFIG_PATH.exists():
-    print(f"[FAIL-FAST] Missing configuration file: {CONFIG_PATH}", file=sys.stderr)
-    sys.exit(1)
-
-with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-    cfg = json.load(f)
-
-input_root = BASE_DIR / cfg.get("dirs", {}).get("input", "_INPUT")
-output_root = BASE_DIR / cfg.get("dirs", {}).get("output", "_OUTPUT")
-
-if not input_root.exists():
-    print(f"[FAIL-FAST] Input directory does not exist: {input_root}", file=sys.stderr)
-    sys.exit(1)
-
-dpi = cfg.get("dpi", 200)
-scale = dpi / 72.0
-matrix = pymupdf.Matrix(scale, scale)
-
-build_cache = {}
-if CACHE_PATH.exists():
-    try:
-        with open(CACHE_PATH, "r", encoding="utf-8") as cf:
-            build_cache = json.load(cf)
-    except Exception:
-        build_cache = {}
+POINTS_PER_INCH: Final[float] = 72.0
 
 
-def file_sha256(path: Path) -> str:
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        while chunk := f.read(65536):
-            h.update(chunk)
-    return h.hexdigest()
+@dataclass(frozen=True)
+class GridConfig:
+    cols: int
+    rows: int
+    card_width_pt: float
+    card_height_pt: float
+    origin_x_pt: float
+    origin_y_pt: float
+    gutter_x_pt: float = 0.0
+    gutter_y_pt: float = 0.0
 
 
-def resolve_profile_for_pdf(pdf_path: Path) -> tuple[dict | None, str | None]:
-    local_conf = pdf_path.parent / "deck.json"
-    effective_rule_profile = None
+@dataclass(frozen=True)
+class DeckProfile:
+    name: str
+    grid: GridConfig
+    duplex_flip: str = "horizontal"
 
-    for rule in cfg.get("rules", []):
-        pattern = rule.get("pattern", "")
-        if pdf_path.match(pattern) or Path(pdf_path.name).match(pattern):
-            effective_rule_profile = rule.get("profile")
-            break
 
-    # Brak reguły i brak lokalnego configu = plik NIE jest przeznaczony do batcha
-    if not effective_rule_profile and not local_conf.exists():
-        return None, None
+class PdfDeckExtractor:
+    """Extracts duplex card grids and single-sheet guidebooks from source PDFs."""
 
-    profile_name = effective_rule_profile or cfg.get("default_profile")
-    base_prof = cfg.get("profiles", {}).get(profile_name)
+    def __init__(self, base_dir: Path) -> None:
+        self.base_dir = base_dir
+        self.config_path = base_dir / "config.json"
+        self.cache_path = base_dir / ".build_cache.json"
 
-    if not base_prof:
-        return None, None
+        self.cfg = self._load_json(self.config_path, fail_fast=True)
+        self.dpi: int = self.cfg.get("dpi", 200)
 
-    prof = json.loads(json.dumps(base_prof))
+        if self.dpi <= 0:
+            self._fail_fast(f"Invalid DPI: {self.dpi}. Must be > 0.")
 
-    if local_conf.exists():
-        try:
-            with open(local_conf, "r", encoding="utf-8") as lf:
-                loc = json.load(lf)
-            if "duplex_flip" in loc:
-                prof["duplex_flip"] = loc["duplex_flip"]
-            if "grid_overrides" in loc:
-                prof["grid"].update(loc["grid_overrides"])
-        except Exception as e:
-            print(f"[WARN] Failed to parse local deck.json in {pdf_path.parent}: {e}", file=sys.stderr)
+        scale_factor = self.dpi / POINTS_PER_INCH
+        self.matrix = pymupdf.Matrix(scale_factor, scale_factor)
 
-    return prof, profile_name
+        dirs_cfg = self.cfg.get("dirs", {})
+        self.input_root = self.base_dir / dirs_cfg.get("input", "_INPUT")
+        self.output_root = self.base_dir / dirs_cfg.get("output", "_OUTPUT")
 
-def process_pdf(pdf_path: Path):
-    prof, prof_name = resolve_profile_for_pdf(pdf_path)
-    if not prof:
-        print(f"[IGNORE] No matching rule/profile for: {pdf_path.name}")
-        return
-    grid = prof["grid"]
-    duplex_flip = prof.get("duplex_flip", "horizontal")
+        if not self.input_root.exists():
+            self._fail_fast(f"Input directory does not exist: {self.input_root}")
 
-    current_hash = file_sha256(pdf_path)
-    config_state_str = json.dumps({"hash": current_hash, "prof": prof, "dpi": dpi}, sort_keys=True)
-    cache_key = str(pdf_path.relative_to(input_root))
+        self.cache = self._load_cache()
 
-    target_rel = pdf_path.parent.relative_to(input_root)
-    clean_stem = pdf_path.stem
-    for rule in cfg.get("rules", []):
-        suffix = rule.get("strip_suffix")
-        if suffix and clean_stem.endswith(suffix):
-            clean_stem = clean_stem[:-len(suffix)].rstrip(" _-")
-            break
-
-    deck_out_dir = output_root / target_rel / clean_stem
-    deck_out_dir.mkdir(parents=True, exist_ok=True)
-
-    if build_cache.get(cache_key) == config_state_str and any(deck_out_dir.glob("card_*_front.png")):
-        print(f"[SKIP] {pdf_path.name} (cached)")
-        return
-
-    doc = pymupdf.open(pdf_path)
-    total_pages = len(doc)
-
-    # 1. Self-healing for single-page standalone documents (sheets/instructions)
-    if total_pages == 1:
-        prof = cfg.get("profiles", {}).get("full_page_duplex", prof)
-        prof_name = "full_page_duplex (auto-detected single page)"
-        grid = prof["grid"]
-        duplex_flip = "none"
-
-    # 2. Resilient classification: documents vs multi-card duplex decks
-    is_guidebook = (
-        total_pages == 1
-        or "guidebook" in pdf_path.name.lower()
-        or "instruction" in pdf_path.name.lower()
-        or prof_name.startswith("full_page")
-        or (grid["cols"] == 1 and grid["rows"] == 1)
-    )
-
-    # 3. Strict Fail-Fast applied ONLY to true multi-card decks
-    if not is_guidebook and total_pages % 2 != 0:
-        print(
-            f"[FAIL-FAST] Odd page count ({total_pages}) detected in double-sided card deck: {pdf_path.name}\n"
-            f"            If this is a rulebook or single sheet, add a rule to config.json or use 'full_page_duplex'.",
-            file=sys.stderr
-        )
-        doc.close()
+    @staticmethod
+    def _fail_fast(message: str) -> None:
+        print(f"[FAIL-FAST] {message}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n[PROCESS] Extracting: {pdf_path.name} -> Profile: {prof_name}")
+    def _load_json(self, path: Path, fail_fast: bool = False) -> dict[str, Any]:
+        if not path.exists():
+            if fail_fast:
+                self._fail_fast(f"Required configuration file missing: {path}")
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as file:
+                return json.load(file)
+        except Exception as exc:
+            self._fail_fast(f"Failed to parse JSON file {path}: {exc}")
+            return {}
 
-    cols = grid["cols"]
-    rows = grid["rows"]
-    w = grid["card_width_pt"]
-    h = grid["card_height_pt"]
-    ox = grid["origin_x_pt"]
-    oy = grid["origin_y_pt"]
-    gx = grid.get("gutter_x_pt", 0.0)
-    gy = grid.get("gutter_y_pt", 0.0)
+    def _load_cache(self) -> dict[str, str]:
+        if not self.cache_path.exists():
+            return {}
+        try:
+            with open(self.cache_path, "r", encoding="utf-8") as file:
+                return json.load(file)
+        except Exception:
+            return {}
 
-    card_counter = 1
-    sheet_pairs = (total_pages + 1) // 2
+    def _save_cache(self) -> None:
+        try:
+            with open(self.cache_path, "w", encoding="utf-8") as file:
+                json.dump(self.cache, file, indent=2)
+        except Exception as exc:
+            print(f"[WARN] Failed to write build cache: {exc}", file=sys.stderr)
 
-    for pair_idx in range(sheet_pairs):
-        f_idx = pair_idx * 2
-        b_idx = f_idx + 1
+    @staticmethod
+    def _compute_sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        with open(path, "rb") as file:
+            while chunk := file.read(65536):
+                digest.update(chunk)
+        return digest.hexdigest()
 
-        f_page = doc[f_idx]
-        b_page = doc[b_idx] if b_idx < total_pages else None
+    def resolve_profile(self, pdf_path: Path) -> Optional[DeckProfile]:
+        local_config_path = pdf_path.parent / "deck.json"
+        matched_rule_profile: Optional[str] = None
 
-        for r in range(rows):
-            for c in range(cols):
-                # Dynamiczna orientacja (Landscape/Portrait) dla pełnych stron/guidebooków
-                if is_guidebook or (cols == 1 and rows == 1):
-                    f_clip = f_page.rect
-                    b_clip = b_page.rect if b_page else f_page.rect
-                else:
-                    fx0 = ox + c * (w + gx)
-                    fy0 = oy + r * (h + gy)
-                    f_clip = pymupdf.Rect(fx0, fy0, fx0 + w, fy0 + h)
+        for rule in self.cfg.get("rules", []):
+            pattern = rule.get("pattern", "")
+            if pdf_path.match(pattern) or Path(pdf_path.name).match(pattern):
+                matched_rule_profile = rule.get("profile")
+                break
 
-                    if duplex_flip == "horizontal":
-                        bc = cols - 1 - c
-                        br = r
-                    elif duplex_flip == "vertical":
-                        bc = c
-                        br = rows - 1 - r
+        if not matched_rule_profile and not local_config_path.exists():
+            return None
+
+        profile_name = matched_rule_profile or self.cfg.get("default_profile", "story_engine_standard")
+        base_profile = self.cfg.get("profiles", {}).get(profile_name)
+
+        if not base_profile:
+            return None
+
+        grid_raw = dict(base_profile["grid"])
+        duplex_flip = base_profile.get("duplex_flip", "horizontal")
+
+        if local_config_path.exists():
+            local_overrides = self._load_json(local_config_path)
+            if "duplex_flip" in local_overrides:
+                duplex_flip = local_overrides["duplex_flip"]
+            if "grid_overrides" in local_overrides:
+                grid_raw.update(local_overrides["grid_overrides"])
+
+        grid = GridConfig(
+            cols=int(grid_raw["cols"]),
+            rows=int(grid_raw["rows"]),
+            card_width_pt=float(grid_raw["card_width_pt"]),
+            card_height_pt=float(grid_raw["card_height_pt"]),
+            origin_x_pt=float(grid_raw["origin_x_pt"]),
+            origin_y_pt=float(grid_raw["origin_y_pt"]),
+            gutter_x_pt=float(grid_raw.get("gutter_x_pt", 0.0)),
+            gutter_y_pt=float(grid_raw.get("gutter_y_pt", 0.0)),
+        )
+
+        return DeckProfile(name=profile_name, grid=grid, duplex_flip=duplex_flip)
+
+    def _determine_output_directory(self, pdf_path: Path) -> Path:
+        target_relative_dir = pdf_path.parent.relative_to(self.input_root)
+        clean_stem = pdf_path.stem
+
+        for rule in self.cfg.get("rules", []):
+            suffix = rule.get("strip_suffix")
+            if suffix and clean_stem.endswith(suffix):
+                clean_stem = clean_stem[:-len(suffix)].rstrip(" _-")
+                break
+
+        output_dir = self.output_root / target_relative_dir / clean_stem
+        output_dir.mkdir(parents=True, exist_ok=True)
+        return output_dir
+
+    def process_pdf(self, pdf_path: Path) -> None:
+        profile = self.resolve_profile(pdf_path)
+        if not profile:
+            print(f"[SKIP] No matching rule or profile found for: {pdf_path.name}")
+            return
+
+        cache_key = str(pdf_path.relative_to(self.input_root))
+        current_hash = self._compute_sha256(pdf_path)
+        cache_state = json.dumps(
+            {
+                "hash": current_hash,
+                "profile": profile.name,
+                "duplex_flip": profile.duplex_flip,
+                "dpi": self.dpi,
+            },
+            sort_keys=True,
+        )
+
+        deck_output_dir = self._determine_output_directory(pdf_path)
+
+        if self.cache.get(cache_key) == cache_state and any(deck_output_dir.glob("card_*_front.png")):
+            print(f"[SKIP] {pdf_path.name} (cached)")
+            return
+
+        doc = pymupdf.open(pdf_path)
+        total_pages = len(doc)
+
+        # Handle standalone single-page documents
+        if total_pages == 1:
+            full_page_cfg = self.cfg.get("profiles", {}).get("full_page_duplex")
+            if full_page_cfg:
+                grid_raw = full_page_cfg["grid"]
+                profile = DeckProfile(
+                    name="full_page_duplex (auto-detected)",
+                    grid=GridConfig(
+                        cols=1,
+                        rows=1,
+                        card_width_pt=float(grid_raw["card_width_pt"]),
+                        card_height_pt=float(grid_raw["card_height_pt"]),
+                        origin_x_pt=float(grid_raw["origin_x_pt"]),
+                        origin_y_pt=float(grid_raw["origin_y_pt"]),
+                        gutter_x_pt=0.0,
+                        gutter_y_pt=0.0,
+                    ),
+                    duplex_flip="none",
+                )
+
+        is_guidebook = (
+            total_pages == 1
+            or "guidebook" in pdf_path.name.lower()
+            or "instruction" in pdf_path.name.lower()
+            or profile.name.startswith("full_page")
+            or (profile.grid.cols == 1 and profile.grid.rows == 1)
+        )
+
+        if not is_guidebook and total_pages % 2 != 0:
+            doc.close()
+            self._fail_fast(
+                f"Odd page count ({total_pages}) detected in double-sided card deck: {pdf_path.name}. "
+                "Verify duplex configuration or declare guidebook rule."
+            )
+
+        print(f"\n[PROCESS] Extracting: {pdf_path.name} -> Profile: {profile.name}")
+
+        grid = profile.grid
+        card_counter = 1
+        sheet_pairs = (total_pages + 1) // 2
+
+        for pair_idx in range(sheet_pairs):
+            front_idx = pair_idx * 2
+            back_idx = front_idx + 1
+
+            front_page = doc[front_idx]
+            back_page = doc[back_idx] if back_idx < total_pages else None
+
+            for row in range(grid.rows):
+                for col in range(grid.cols):
+                    if is_guidebook or (grid.cols == 1 and grid.rows == 1):
+                        front_rect = front_page.rect
+                        back_rect = back_page.rect if back_page else front_page.rect
                     else:
-                        bc = c
-                        br = r
+                        fx0 = grid.origin_x_pt + col * (grid.card_width_pt + grid.gutter_x_pt)
+                        fy0 = grid.origin_y_pt + row * (grid.card_height_pt + grid.gutter_y_pt)
+                        front_rect = pymupdf.Rect(fx0, fy0, fx0 + grid.card_width_pt, fy0 + grid.card_height_pt)
 
-                    bx0 = ox + bc * (w + gx)
-                    by0 = oy + br * (h + gy)
-                    b_clip = pymupdf.Rect(bx0, by0, bx0 + w, by0 + h)
+                        if profile.duplex_flip == "horizontal":
+                            back_col = grid.cols - 1 - col
+                            back_row = row
+                        elif profile.duplex_flip == "vertical":
+                            back_col = col
+                            back_row = grid.rows - 1 - row
+                        else:
+                            back_col = col
+                            back_row = row
 
-                # Front side
-                f_pix = f_page.get_pixmap(matrix=matrix, clip=f_clip, alpha=False)
-                f_pix.save(deck_out_dir / f"card_{card_counter:03d}_front.png")
+                        bx0 = grid.origin_x_pt + back_col * (grid.card_width_pt + grid.gutter_x_pt)
+                        by0 = grid.origin_y_pt + back_row * (grid.card_height_pt + grid.gutter_y_pt)
+                        back_rect = pymupdf.Rect(bx0, by0, bx0 + grid.card_width_pt, by0 + grid.card_height_pt)
 
-                # Back side (with blank fallback for odd trailing page)
-                if b_page:
-                    b_pix = b_page.get_pixmap(matrix=matrix, clip=b_clip, alpha=False)
-                    b_pix.save(deck_out_dir / f"card_{card_counter:03d}_back.png")
-                else:
-                    cur_w = f_clip.width if (is_guidebook or (cols == 1 and rows == 1)) else w
-                    cur_h = f_clip.height if (is_guidebook or (cols == 1 and rows == 1)) else h
-                    blank = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, int(cur_w * scale), int(cur_h * scale)))
-                    blank.clear_with(255)
-                    blank.save(deck_out_dir / f"card_{card_counter:03d}_back.png")
+                    front_pix = front_page.get_pixmap(matrix=self.matrix, clip=front_rect, alpha=False)
+                    front_pix.save(deck_output_dir / f"card_{card_counter:03d}_front.png")
 
-                card_counter += 1
+                    if back_page:
+                        back_pix = back_page.get_pixmap(matrix=self.matrix, clip=back_rect, alpha=False)
+                        back_pix.save(deck_output_dir / f"card_{card_counter:03d}_back.png")
+                    else:
+                        target_w = front_rect.width
+                        target_h = front_rect.height
+                        blank_pix = pymupdf.Pixmap(
+                            pymupdf.csRGB,
+                            pymupdf.IRect(0, 0, int(target_w * (self.dpi / POINTS_PER_INCH)), int(target_h * (self.dpi / POINTS_PER_INCH))),
+                        )
+                        blank_pix.clear_with(255)
+                        blank_pix.save(deck_output_dir / f"card_{card_counter:03d}_back.png")
 
-    doc.close()
-    build_cache[cache_key] = config_state_str
-    print(f"  [+] Saved {card_counter - 1} cards into: {deck_out_dir}")
+                    card_counter += 1
 
-def main():
-    pdf_files = sorted(list(input_root.rglob("*.pdf")))
-    if not pdf_files:
-        print(f"[INFO] No PDF files found in {input_root}")
-        return
+        doc.close()
+        self.cache[cache_key] = cache_state
+        print(f"  [+] Saved {card_counter - 1} cards into: {deck_output_dir}")
 
-    print(f"[*] Starting extraction from {input_root}. Discovered {len(pdf_files)} PDF file(s).")
-    output_root.mkdir(parents=True, exist_ok=True)
+    def run(self) -> None:
+        pdf_files = sorted(list(self.input_root.rglob("*.pdf")))
+        if not pdf_files:
+            print(f"[INFO] No PDF files found in: {self.input_root}")
+            return
 
-    for pdf in pdf_files:
-        process_pdf(pdf)
+        print(f"[*] Starting extraction from {self.input_root}. Discovered {len(pdf_files)} PDF file(s).")
+        self.output_root.mkdir(parents=True, exist_ok=True)
 
-    with open(CACHE_PATH, "w", encoding="utf-8") as cf:
-        json.dump(build_cache, cf, indent=2)
-    print("\n[OK] Card extraction completed successfully.")
+        for pdf in pdf_files:
+            self.process_pdf(pdf)
+
+        self._save_cache()
+        print("\n[OK] Card extraction completed successfully.")
+
+
+def main() -> None:
+    base_dir = Path(__file__).resolve().parent
+    extractor = PdfDeckExtractor(base_dir)
+    extractor.run()
 
 
 if __name__ == "__main__":
