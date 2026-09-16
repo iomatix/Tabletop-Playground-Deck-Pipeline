@@ -20,21 +20,21 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 > [!NOTE]
 > In the extraction path `card_###_[front|back].png`, `###` denotes the **1-based sequential card index** within that specific deck folder (e.g., `card_001_front.png` to `card_120_front.png`), not a physical page number.
 > 
->
+> 
 
 ---
 
 > [!IMPORTANT]
 > **Key Architecture Highlights**
-> * **Deterministic Physics (SoC):** Card dimensions (`Width`, `Height`) are calculated dynamically from pixel boundaries and DPI:
->   ```
->   size_cm = (pixels / dpi) * 2.54
->   ```
->   No hardcoded magic numbers.
-> * **Native Multi-Sheet Decks:** Decks exceeding TTPG grid capacity (100 cards / 10×10 max cells) or GPU texture boundaries (8192 px) compile into a single unified Card template using `ExtraFrontTextures` and `ExtraBackTextures`, preventing split stacks in-game.
+> * **Deterministic Physics (SoC):** Card dimensions (`Width`, `Height`) are calculated dynamically from pixel boundaries and DPI: $size_{cm} = \frac{pixels}{dpi} \times 2.54$. No hardcoded magic numbers.
+> * **Native Multi-Sheet Decks:** Decks exceeding TTPG grid capacity (100 cards / $10 \times 10$ max cells) or GPU texture boundaries (8192 px) compile into a single unified Card template using `ExtraFrontTextures` and `ExtraBackTextures`, preventing split stacks in-game.
 > * **Contract-Driven Pipeline (`deck_meta.json`):** Downstream tools receive exact classification (`card_deck` vs. `document`) directly from the extraction phase, eliminating brittle string heuristics.
+> 
+> 
 > * **Context-Aware Naming & Tooltips:** In-game objects are prefixed with package hierarchy (`[Bridge Expansion Set] Lore Master's Deck Guidebook`), and cards held in hand display distinct hover labels (`Deck #001`, `Guidebook - Page 1`).
 > * **Strict Allow-List:** Only PDFs explicitly matching rules in `config.json` are processed; print/assembly guides and alternate eco cuts are ignored by default.
+> 
+> 
 > 
 > 
 
@@ -291,7 +291,7 @@ Supported values for `item_type`:
 
 When a deck exceeds single-sheet texture limits ($8192\text{ px}$ or 100 cards), `ttpg_packager.py`:
 
-1. Enforces uniform grid dimensions across all sheets (cols × rows).
+1. Enforces uniform grid dimensions across all sheets (`cols` $\times$ `rows`).
 2. Generates numbered atlas pairs: `<Deck>_01_front.png`, `<Deck>_01_back.png`, `<Deck>_02_front.png`...
 3. Writes a **single** `<GUID>Card.json` linking `ExtraFrontTextures` and `ExtraBackTextures`.
 4. Sets `"BackIndex": -3`:
