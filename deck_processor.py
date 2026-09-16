@@ -158,7 +158,7 @@ class PdfDeckExtractor:
         clean_stem = pdf_path.stem
 
         if strip_suffix and clean_stem.endswith(strip_suffix):
-            clean_stem = clean_stem[:-len(strip_suffix)].rstrip(" _-")
+            clean_stem = clean_stem[: -len(strip_suffix)].rstrip(" _-")
 
         output_dir = self.output_root / target_relative_dir / clean_stem
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -215,7 +215,7 @@ class PdfDeckExtractor:
                     duplex_flip="none",
                 )
 
-        is_document = (profile.grid.cols == 1 and profile.grid.rows == 1)
+        is_document = profile.grid.cols == 1 and profile.grid.rows == 1
 
         # Enforce duplex parity on multi-card decks
         if not is_document and total_pages % 2 != 0:
@@ -225,7 +225,9 @@ class PdfDeckExtractor:
                 "Verify duplex binding or assign a single-page document profile."
             )
 
-        print(f"\n[PROCESS] Extracting: {pdf_path.name} -> Profile: {profile.name} (Type: {'Document' if is_document else 'Card Deck'})")
+        print(
+            f"\n[PROCESS] Extracting: {pdf_path.name} -> Profile: {profile.name} (Type: {'Document' if is_document else 'Card Deck'})"
+        )
 
         grid = profile.grid
         card_counter = 1

@@ -147,12 +147,14 @@ def create_diagnostics_view(lang_selector_ref_getter: Callable[[], Optional[ui.s
         btn_fast = ui.button(
             t("btn_run_fast_tests"),
             icon="flash_on",
-            on_click=lambda: execute_pytest([
-                "tests/test_smoke.py",
-                "tests/test_localization.py",
-                "tests/test_pdf_analyzer.py",
-                "tests/test_packager_install.py",
-            ]),
+            on_click=lambda: execute_pytest(
+                [
+                    "tests/test_smoke.py",
+                    "tests/test_localization.py",
+                    "tests/test_pdf_analyzer.py",
+                    "tests/test_packager_install.py",
+                ]
+            ),
         ).props("outline color=secondary")
 
         btn_install_test = ui.button(

@@ -199,9 +199,12 @@ def create_calibrator_view() -> None:
     # Dialogs
     with ui.dialog() as guide_dialog, ui.card().classes("w-96"):
         ui.label(t("two_click_title")).classes("text-h6 font-bold")
-        mode_radio = ui.radio({"card": t("two_click_mode_card"), "grid": t("two_click_mode_grid")}, value="card").classes("q-my-sm")
+        mode_radio = ui.radio(
+            {"card": t("two_click_mode_card"), "grid": t("two_click_mode_grid")}, value="card"
+        ).classes("q-my-sm")
         ui.markdown(t("two_click_guide_details"))
         with ui.row().classes("w-full justify-end q-mt-md"):
+
             def start_two_click_session() -> None:
                 nonlocal two_click_mode, first_click_point, calibration_target
                 two_click_mode = True

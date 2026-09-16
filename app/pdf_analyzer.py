@@ -32,9 +32,7 @@ def _cluster_1d(values: list[float], tolerance: float = 2.0) -> list[float]:
     return [round(float(median(c)), 2) for c in clusters]
 
 
-def _decompose_axis(
-    coords: list[float], page_dimension: float
-) -> tuple[int, float, float, float]:
+def _decompose_axis(coords: list[float], page_dimension: float) -> tuple[int, float, float, float]:
     """
     Analyzes 1D cut coordinates using first-order differences.
     Selects dominant cluster frequency to determine card size.
@@ -68,9 +66,7 @@ def _decompose_axis(
     gutter = 0.0
     if gutter_deltas:
         gutter_clusters = _cluster_1d(gutter_deltas, tolerance=2.0)
-        gutter_counter = Counter(
-            min(gutter_clusters, key=lambda g: abs(g - d)) for d in gutter_deltas
-        )
+        gutter_counter = Counter(min(gutter_clusters, key=lambda g: abs(g - d)) for d in gutter_deltas)
         gutter = gutter_counter.most_common(1)[0][0]
 
     origin = coords[0]

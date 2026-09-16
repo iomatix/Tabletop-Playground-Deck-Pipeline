@@ -200,7 +200,9 @@ class DeckInspector:
 
                 print(f"[OK] Inspected Document : {sample_pdf.name}")
                 print(f"[OK] Resolution Engine  : {source}")
-                print(f"[OK] Grid Geometry      : {grid.cols}x{grid.rows} (Card: {grid.card_width_pt}x{grid.card_height_pt} pt)")
+                print(
+                    f"[OK] Grid Geometry      : {grid.cols}x{grid.rows} (Card: {grid.card_width_pt}x{grid.card_height_pt} pt)"
+                )
                 print(f"[OK] Duplex Mode        : {duplex_flip}")
                 print(f"[OK] Front Sample       : {out_front.name} ({pix_front.width}x{pix_front.height} px)")
                 if has_back:

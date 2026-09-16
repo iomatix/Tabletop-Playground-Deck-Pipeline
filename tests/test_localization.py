@@ -28,9 +28,7 @@ def _load_json_checking_duplicates(path: Path) -> dict[str, str]:
         return json.load(f, object_pairs_hook=dict_raise_on_duplicates)
 
 
-def _sync_and_sort_locales(
-    en_path: Path, pl_path: Path
-) -> tuple[set[str], set[str]]:
+def _sync_and_sort_locales(en_path: Path, pl_path: Path) -> tuple[set[str], set[str]]:
     """Sorts keys alphabetically and scaffolds missing keys with TODO markers."""
     with open(en_path, "r", encoding="utf-8") as f:
         en_data: dict[str, str] = json.load(f)
@@ -130,6 +128,4 @@ def test_codebase_t_keys_exist_in_locales():
 
     missing_keys = used_keys - locale_keys
     if missing_keys:
-        pytest.fail(
-            f"Keys used in codebase via t(...) but completely missing in locales: {missing_keys}"
-        )
+        pytest.fail(f"Keys used in codebase via t(...) but completely missing in locales: {missing_keys}")

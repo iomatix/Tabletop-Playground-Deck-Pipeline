@@ -19,9 +19,7 @@ from typing import Any, Final
 BASE_DIR: Final[Path] = Path(__file__).resolve().parent.parent
 CONFIG_PATH: Final[Path] = BASE_DIR / "config.json"
 LOCALES_DIR: Final[Path] = BASE_DIR / "locales"
-TTPG_PACKAGES_DIR: Final[Path] = Path(
-    os.path.expandvars(r"%LOCALAPPDATA%\TabletopPlayground\Packages")
-)
+TTPG_PACKAGES_DIR: Final[Path] = Path(os.path.expandvars(r"%LOCALAPPDATA%\TabletopPlayground\Packages"))
 
 PREVIEW_DPI: Final[int] = 100
 PREVIEW_SCALE: Final[float] = PREVIEW_DPI / 72.0
@@ -85,6 +83,7 @@ locale_mgr = LocaleManager(LOCALES_DIR)
 def t(key: str) -> str:
     """Shortcut function for localization lookups."""
     return locale_mgr.translate(key, state.current_lang)
+
 
 def open_system_folder(path: Path) -> None:
     if not path.exists():

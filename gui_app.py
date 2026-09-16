@@ -19,8 +19,7 @@ for mod in REQUIRED_MODULES:
 
 if missing:
     print(
-        f"[FAIL-FAST] Missing dependencies: {', '.join(missing)}. "
-        f"Install them via: pip install {' '.join(missing)}",
+        f"[FAIL-FAST] Missing dependencies: {', '.join(missing)}. Install them via: pip install {' '.join(missing)}",
         file=sys.stderr,
     )
     sys.exit(1)
@@ -51,9 +50,7 @@ def patch_windows_proactor_loop() -> None:
 
     original_handler = loop.get_exception_handler()
 
-    def connection_reset_exception_handler(
-        current_loop: asyncio.AbstractEventLoop, context: dict[str, Any]
-    ) -> None:
+    def connection_reset_exception_handler(current_loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
         exc = context.get("exception")
         if isinstance(exc, ConnectionResetError) or (
             isinstance(exc, OSError) and getattr(exc, "winerror", None) == 10054
@@ -100,11 +97,15 @@ def index_page() -> None:
                 btn_ttpg.text = t("btn_open_ttpg_dir")
                 render_dashboard.refresh()
 
-            lang_selector = ui.select(
-                {"en": "English", "pl": "Polski"},
-                value=state.current_lang,
-                on_change=handle_language_change,
-            ).props("dense borderless dark options-dark").classes("w-28 text-white")
+            lang_selector = (
+                ui.select(
+                    {"en": "English", "pl": "Polski"},
+                    value=state.current_lang,
+                    on_change=handle_language_change,
+                )
+                .props("dense borderless dark options-dark")
+                .classes("w-28 text-white")
+            )
             lang_selector_ref["widget"] = lang_selector
 
     @ui.refreshable
