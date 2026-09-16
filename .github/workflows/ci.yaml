@@ -1,5 +1,8 @@
 name: CI & Release Pipeline
 
+permissions:
+  contents: write
+
 on:
   push:
     branches: [ main, master ]
