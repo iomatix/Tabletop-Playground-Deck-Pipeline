@@ -27,6 +27,7 @@
   "card_params_box": "Grid Parameters (points pt)",
   "card_w_label": "Card Width (pt)",
   "cols_label": "Columns",
+  "diag_btn_test_installer": "Test TTPG Installer",
   "diag_console_header": "Pytest Execution Console",
   "diag_desc": "Run automated unit, regression, i18n parity, and PDF batch parsing tests directly from the GUI.",
   "diag_lint_failed": "Ruff detected issues! Review the console output below.",
@@ -52,6 +53,7 @@
   "notify_extract_fail": "Error during card extraction!",
   "notify_extract_ok": "Cards extracted successfully!",
   "notify_install_fail": "Package installation failed!",
+  "notify_install_manifest_missing": "Manifest.json missing in target folder after installation!",
   "notify_install_ok": "Package successfully installed into TTPG!",
   "notify_invalid_profile": "Invalid profile name",
   "notify_locales_synced": "Locales sorted and missing keys scaffolded!",
@@ -102,5 +104,6 @@
   "type_full_sheet": "Full Page Sheet",
   "type_mini_tarot": "Mini / Tarot Format",
   "type_square_cards": "Square Cards",
-  "type_standard_poker": "Standard Poker (2.5x3.5in)"
+  "type_standard_poker": "Standard Poker (2.5x3.5in)",
+  "wizard_install_diag_label": "Installation Diagnostics Log:"
 }

@@ -17,7 +17,6 @@ def create_diagnostics_view(lang_selector_ref_getter: Callable[[], Optional[ui.s
     ui.markdown(f"### {t('diag_title')}")
     ui.markdown(t("diag_desc"))
 
-    # Info about input files
     with ui.card().classes("w-full bg-blue-grey-1 border-l-4 border-primary q-pa-sm q-my-sm"):
         ui.label(t("diag_notice_title")).classes("font-bold text-caption text-primary")
         ui.markdown(t("diag_notice_desc")).classes("text-caption text-grey-8")
@@ -152,8 +151,15 @@ def create_diagnostics_view(lang_selector_ref_getter: Callable[[], Optional[ui.s
                 "tests/test_smoke.py",
                 "tests/test_localization.py",
                 "tests/test_pdf_analyzer.py",
+                "tests/test_packager_install.py",
             ]),
         ).props("outline color=secondary")
+
+        btn_install_test = ui.button(
+            t("diag_btn_test_installer"),
+            icon="install_desktop",
+            on_click=lambda: execute_pytest(["tests/test_packager_install.py"]),
+        ).props("outline color=teal")
 
         btn_linter = ui.button(
             t("btn_run_linter"),
@@ -167,4 +173,4 @@ def create_diagnostics_view(lang_selector_ref_getter: Callable[[], Optional[ui.s
             on_click=run_locale_sync,
         ).props("outline color=grey-8")
 
-        all_buttons.extend([btn_all, btn_fast, btn_linter, btn_sync])
+        all_buttons.extend([btn_all, btn_fast, btn_install_test, btn_linter, btn_sync])

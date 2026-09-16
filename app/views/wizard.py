@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 import sys
+from pathlib import Path
 from typing import Callable, Optional
 
 from nicegui import ui
@@ -21,6 +22,23 @@ from app.state import (
     t,
 )
 
+
+def check_package_ready(pkg_dir: str, pkg_name: str) -> tuple[bool, str]:
+    target = BASE_DIR / pkg_dir / pkg_name
+    manifest = target / "Manifest.json"
+    templates_dir = target / "Templates"
+    textures_dir = target / "Textures"
+
+    if not manifest.exists():
+        return False, "No Manifest.json found"
+
+    n_templates = len(list(templates_dir.glob("*.json"))) if templates_dir.exists() else 0
+    n_textures = len(list(textures_dir.glob("*.png"))) if textures_dir.exists() else 0
+
+    if n_templates == 0 or n_textures == 0:
+        return False, f"Incomplete assets (Templates: {n_templates}, Textures: {n_textures})"
+
+    return True, f"Found valid package ({n_templates} templates, {n_textures} textures)"
 
 def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.select]]) -> None:
     with ui.stepper().props("vertical").classes("w-full") as stepper:
@@ -130,9 +148,35 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
             with ui.stepper_navigation():
                 ui.button(t("btn_back"), on_click=stepper.previous).props("flat")
 
-        # Step 3: Packaging
+# Step 3: Packaging
         with ui.step(t("step_3_title")):
             ui.markdown(t("step_3_desc"))
+
+            pkg_status_label = ui.label("").classes("text-caption font-mono q-mb-sm")
+            with ui.row().classes("items-center gap-2 q-mb-md"):
+                pkg_status_badge = ui.badge("", color="grey-7").classes("text-caption")
+                btn_skip_to_install = ui.button(
+                    t("btn_save_and_next"),
+                    on_click=stepper.next,
+                ).props("flat color=secondary icon-right=arrow_forward")
+
+            def refresh_package_status() -> bool:
+                is_ready, msg = check_package_ready(pkg_dir_in.value, pkg_name_in.value)
+                pkg_status_label.text = msg
+                if is_ready:
+                    pkg_status_badge.text = "READY"
+                    pkg_status_badge.props("color=positive")
+                    btn_skip_to_install.enable()
+                else:
+                    pkg_status_badge.text = "NOT COMPILED"
+                    pkg_status_badge.props("color=grey-7")
+                    btn_skip_to_install.disable()
+                return is_ready
+
+            pkg_name_in.on("change", refresh_package_status)
+            pkg_dir_in.on("change", refresh_package_status)
+            refresh_package_status()
+
             log_pack = ui.log().classes("w-full h-44 bg-grey-10 text-white font-mono text-caption")
             for line in state.execution_logs:
                 log_pack.push(line)
@@ -168,6 +212,7 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
 
                     if proc.returncode == 0:
                         ui.notify(t("notify_package_ok"), type="positive")
+                        refresh_package_status()
                         stepper.next()
                     else:
                         ui.notify(t("notify_package_fail"), type="negative")
@@ -198,46 +243,88 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
         with ui.step(t("step_4_title")):
             ui.markdown(t("step_4_desc"))
 
-            def install_to_ttpg_environment() -> None:
-                # Check both possible locations for the package directory
-                candidate_1 = BASE_DIR / pkg_dir_in.value / pkg_name_in.value
-                candidate_2 = BASE_DIR / pkg_dir_in.value
+            ui.label(t("wizard_install_diag_label")).classes("text-caption text-grey-7 font-bold")
+            install_log = ui.log().classes("w-full h-48 bg-grey-10 text-white font-mono text-caption q-my-sm rounded")
 
-                if (candidate_1 / "Manifest.json").exists():
-                    source_pkg = candidate_1
-                elif (candidate_2 / "Manifest.json").exists():
-                    source_pkg = candidate_2
-                elif candidate_1.is_dir():
-                    source_pkg = candidate_1
-                elif candidate_2.is_dir():
-                    source_pkg = candidate_2
-                else:
-                    ui.notify(f"{t('notify_no_package')} ({candidate_1})", type="warning")
+            def run_install_with_diagnostics() -> None:
+                install_log.clear()
+                install_log.push("[INIT] Starting installation sequence...")
+
+                raw_pkg_dir = Path(pkg_dir_in.value.strip())
+                raw_pkg_name = pkg_name_in.value.strip()
+
+                install_log.push(f"[DEBUG] Input pkg_dir: {raw_pkg_dir}")
+                install_log.push(f"[DEBUG] Input pkg_name: {raw_pkg_name}")
+                install_log.push(f"[DEBUG] TTPG_PACKAGES_DIR: {TTPG_PACKAGES_DIR}")
+
+                candidates: list[Path] = [
+                    BASE_DIR / raw_pkg_dir / raw_pkg_name,
+                    BASE_DIR / raw_pkg_dir,
+                    raw_pkg_dir if raw_pkg_dir.is_absolute() else (BASE_DIR / raw_pkg_dir),
+                ]
+
+                package_root = BASE_DIR / "_PACKAGE"
+                if package_root.exists():
+                    for folder in package_root.iterdir():
+                        if folder.is_dir() and folder not in candidates:
+                            candidates.append(folder)
+
+                source_pkg: Path | None = None
+                for cand in candidates:
+                    manifest = cand / "Manifest.json"
+                    install_log.push(f"[PROBE] Checking: {cand} -> Manifest: {manifest.exists()}")
+                    if manifest.exists():
+                        source_pkg = cand
+                        break
+
+                if not source_pkg:
+                    install_log.push("[ERROR] Could not locate any directory containing 'Manifest.json'!")
+                    ui.notify(t("notify_no_package"), type="negative")
                     return
 
-                # Determine the final package name
-                final_pkg_name = pkg_name_in.value.strip() or source_pkg.name
-                target_dest = TTPG_PACKAGES_DIR / final_pkg_name
+                final_name = raw_pkg_name or source_pkg.name
+                target_dest = TTPG_PACKAGES_DIR / final_name
+
+                install_log.push(f"[RESOLVED] Source: {source_pkg}")
+                install_log.push(f"[RESOLVED] Destination: {target_dest}")
 
                 try:
                     TTPG_PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
-                    # Copy with overwrite existing files
-                    shutil.copytree(source_pkg, target_dest, dirs_exist_ok=True)
-                    
-                    # Fail-fast verification after installation
-                    if (target_dest / "Manifest.json").exists():
-                        ui.notify(f"{t('notify_install_ok')}: {final_pkg_name}", type="positive")
+                    install_log.push(f"[FS] Target base ensured: {TTPG_PACKAGES_DIR}")
+
+                    target_dest.mkdir(parents=True, exist_ok=True)
+
+                    total_copied = 0
+                    for item in source_pkg.rglob("*"):
+                        rel_path = item.relative_to(source_pkg)
+                        dest_item = target_dest / rel_path
+
+                        if item.is_dir():
+                            dest_item.mkdir(parents=True, exist_ok=True)
+                        else:
+                            dest_item.parent.mkdir(parents=True, exist_ok=True)
+                            shutil.copy2(item, dest_item)
+                            total_copied += 1
+
+                    install_log.push(f"[SUCCESS] Copied {total_copied} file(s) into {target_dest}")
+
+                    dest_manifest = target_dest / "Manifest.json"
+                    if dest_manifest.exists():
+                        install_log.push("[VERIFY] Manifest.json confirmed in target folder.")
+                        ui.notify(f"{t('notify_install_ok')}: {final_name}", type="positive")
                     else:
-                        ui.notify("Warning: Package copied, but Manifest.json was not found at target!", type="warning")
+                        install_log.push("[FAIL] Manifest.json missing after copy operation!")
+                        ui.notify(t("notify_install_manifest_missing"), type="warning")
+
                 except Exception as exc:
-                    print(f"[FAIL-FAST] Installation failed: {exc}", file=sys.stderr)
+                    install_log.push(f"[EXCEPTION] {type(exc).__name__}: {exc}")
                     ui.notify(f"{t('notify_install_fail')} ({exc})", type="negative")
 
-            with ui.row().classes("gap-3"):
+            with ui.row().classes("gap-3 q-my-sm"):
                 ui.button(
                     t("btn_install_direct"),
                     icon="download_done",
-                    on_click=install_to_ttpg_environment,
+                    on_click=run_install_with_diagnostics,
                 ).props("color=primary")
 
                 target_pkg_dir = BASE_DIR / pkg_dir_in.value / pkg_name_in.value

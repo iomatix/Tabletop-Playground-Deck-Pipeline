@@ -44,8 +44,10 @@ def test_module_syntax_imports():
     import app.views.wizard
     import deck_processor
     import inspect_deck
+    import tests.test_packager_install
     import ttpg_packager
 
+    assert hasattr(tests.test_packager_install, "simulate_install")
     assert hasattr(deck_processor, "PdfDeckExtractor")
     assert hasattr(ttpg_packager, "PackageOrchestrator")
     assert hasattr(inspect_deck, "DeckInspector")

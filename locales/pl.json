@@ -27,6 +27,7 @@
   "card_params_box": "Parametry Siatki (w punktach pt)",
   "card_w_label": "Szerokość karty (pt)",
   "cols_label": "Kolumny",
+  "diag_btn_test_installer": "Testuj instalator TTPG",
   "diag_console_header": "Konsola Wyników Pytest",
   "diag_desc": "Uruchamiaj zautomatyzowane testy jednostkowe, regresyjne, spójności i18n oraz wsadowego parsowania PDF bezpośrednio z interfejsu GUI.",
   "diag_lint_failed": "Ruff wykrył błędy w kodzie! Sprawdź log w konsoli poniżej.",
@@ -52,6 +53,7 @@
   "notify_extract_fail": "Błąd ekstrakcji kart!",
   "notify_extract_ok": "Karty wycięte pomyślnie!",
   "notify_install_fail": "Błąd instalacji pakietu!",
+  "notify_install_manifest_missing": "Brak pliku Manifest.json w folderze docelowym po instalacji!",
   "notify_install_ok": "Pakiet pomyślnie zainstalowany w TTPG!",
   "notify_invalid_profile": "Nieprawidłowa nazwa profilu",
   "notify_locales_synced": "Słowniki posortowane i uzupełnione szablonami!",
@@ -102,5 +104,6 @@
   "type_full_sheet": "Pełny Arkusz",
   "type_mini_tarot": "Format Mini / Tarot",
   "type_square_cards": "Karty Kwadratowe",
-  "type_standard_poker": "Standard Poker (2.5x3.5in)"
+  "type_standard_poker": "Standard Poker (2.5x3.5in)",
+  "wizard_install_diag_label": "Dziennik diagnostyczny instalacji:"
 }
