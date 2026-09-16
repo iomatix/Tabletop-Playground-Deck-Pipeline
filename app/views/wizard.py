@@ -199,16 +199,36 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
             ui.markdown(t("step_4_desc"))
 
             def install_to_ttpg_environment() -> None:
-                source_pkg = BASE_DIR / pkg_dir_in.value / pkg_name_in.value
-                if not source_pkg.exists():
-                    ui.notify(t("notify_no_package"), type="warning")
+                # Check both possible locations for the package directory
+                candidate_1 = BASE_DIR / pkg_dir_in.value / pkg_name_in.value
+                candidate_2 = BASE_DIR / pkg_dir_in.value
+
+                if (candidate_1 / "Manifest.json").exists():
+                    source_pkg = candidate_1
+                elif (candidate_2 / "Manifest.json").exists():
+                    source_pkg = candidate_2
+                elif candidate_1.is_dir():
+                    source_pkg = candidate_1
+                elif candidate_2.is_dir():
+                    source_pkg = candidate_2
+                else:
+                    ui.notify(f"{t('notify_no_package')} ({candidate_1})", type="warning")
                     return
 
-                target_dest = TTPG_PACKAGES_DIR / pkg_name_in.value
+                # Determine the final package name
+                final_pkg_name = pkg_name_in.value.strip() or source_pkg.name
+                target_dest = TTPG_PACKAGES_DIR / final_pkg_name
+
                 try:
                     TTPG_PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
+                    # Copy with overwrite existing files
                     shutil.copytree(source_pkg, target_dest, dirs_exist_ok=True)
-                    ui.notify(t("notify_install_ok"), type="positive")
+                    
+                    # Fail-fast verification after installation
+                    if (target_dest / "Manifest.json").exists():
+                        ui.notify(f"{t('notify_install_ok')}: {final_pkg_name}", type="positive")
+                    else:
+                        ui.notify("Warning: Package copied, but Manifest.json was not found at target!", type="warning")
                 except Exception as exc:
                     print(f"[FAIL-FAST] Installation failed: {exc}", file=sys.stderr)
                     ui.notify(f"{t('notify_install_fail')} ({exc})", type="negative")
