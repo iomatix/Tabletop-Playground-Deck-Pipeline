@@ -28,3 +28,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 # gui_app.py pre-flights before importing NiceGUI
 "gui_app.py" = ["E402"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
