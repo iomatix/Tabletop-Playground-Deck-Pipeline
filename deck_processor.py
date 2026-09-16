@@ -330,8 +330,15 @@ class PdfDeckExtractor:
         print("\n[OK] Card extraction completed successfully.")
 
 
+# ---------------------------------------------------------------------------
+# Entry Point
+# ---------------------------------------------------------------------------
 def main() -> None:
-    base_dir = Path(__file__).resolve().parent
+    if getattr(sys, "frozen", False):
+        base_dir = Path(sys.executable).resolve().parent
+    else:
+        base_dir = Path(__file__).resolve().parent
+
     extractor = PdfDeckExtractor(base_dir)
     extractor.run()
 

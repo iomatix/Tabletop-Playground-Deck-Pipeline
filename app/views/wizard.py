@@ -45,6 +45,8 @@ def check_package_ready(pkg_dir: str, pkg_name: str) -> tuple[bool, str]:
 
 
 def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.select]]) -> None:
+    is_frozen = getattr(sys, "frozen", False)
+
     with ui.stepper().props('vertical :header-nav="false"').classes("w-full") as stepper:
         # -------------------------------------------------------------------
         # Step 1: Configuration
@@ -118,12 +120,16 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                     state.execution_logs.append(msg)
                     log_extract.push(msg)
 
-                log_output("[START] Invoking deck_processor.py...")
+                log_output("[START] Invoking deck extraction pipeline...")
                 try:
+                    if is_frozen:
+                        cmd = [sys.executable, "deck_processor"]
+                    else:
+                        cmd = [sys.executable, "-u", str(BASE_DIR / "deck_processor.py")]
+
                     proc = await asyncio.create_subprocess_exec(
-                        sys.executable,
-                        "-u",
-                        str(BASE_DIR / "deck_processor.py"),
+                        *cmd,
+                        cwd=str(BASE_DIR),
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.STDOUT,
                     )
@@ -136,6 +142,9 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                         stepper.next()
                     else:
                         ui.notify(t("notify_extract_fail"), type="negative")
+                except Exception as exc:
+                    log_output(f"[ERROR] Subprocess error: {exc}")
+                    ui.notify(t("notify_extract_fail"), type="negative")
                 finally:
                     state.is_busy = False
                     if selector:
@@ -217,12 +226,16 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                     state.execution_logs.append(msg)
                     log_pack.push(msg)
 
-                log_output("[START] Invoking ttpg_packager.py...")
+                log_output("[START] Invoking ttpg packager pipeline...")
                 try:
+                    if is_frozen:
+                        cmd = [sys.executable, "ttpg_packager"]
+                    else:
+                        cmd = [sys.executable, "-u", str(BASE_DIR / "ttpg_packager.py")]
+
                     proc = await asyncio.create_subprocess_exec(
-                        sys.executable,
-                        "-u",
-                        str(BASE_DIR / "ttpg_packager.py"),
+                        *cmd,
+                        cwd=str(BASE_DIR),
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.STDOUT,
                     )
@@ -237,6 +250,9 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                     else:
                         ui.notify(t("notify_package_fail"), type="negative")
                         refresh_package_status()
+                except Exception as exc:
+                    log_output(f"[ERROR] Subprocess error: {exc}")
+                    ui.notify(t("notify_package_fail"), type="negative")
                 finally:
                     state.is_busy = False
                     if selector:
@@ -317,7 +333,6 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                     TTPG_PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
                     install_log.push(f"[FS] Target base ensured: {TTPG_PACKAGES_DIR}")
 
-                    # Purge previous installations to avoid orphaned assets
                     if target_dest.exists():
                         install_log.push(f"[CLEAN] Purging existing target assets in: {target_dest.name}")
                         shutil.rmtree(target_dest)
