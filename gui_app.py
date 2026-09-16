@@ -9,7 +9,7 @@ import sys
 from typing import Any, Final, Optional
 
 # Pre-flight runtime dependency check
-REQUIRED_MODULES: Final[list[str]] = ["pymupdf", "PIL", "nicegui", "pytest", "ruff"]
+REQUIRED_MODULES: Final[list[str]] = ["pymupdf", "PIL", "nicegui"]
 missing = []
 for mod in REQUIRED_MODULES:
     try:
