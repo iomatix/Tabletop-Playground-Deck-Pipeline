@@ -40,21 +40,11 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 
 | File | Role | Execution |
 | --- | --- | --- |
-| `gui_app.py` | Complete desktop dashboard with 4-step wizard and live visual calibration.
-
- | `python gui_app.py` (or `run_app.bat`)
-
- |
-| `deck_processor.py` | Vector extraction engine. Renders card pairs from PDF according to grid profiles.
-
- | `python deck_processor.py` |
-| `ttpg_packager.py` | Compiles card pairs into atlases and generates unified TTPG `<GUID>Card.json` templates. | `python ttpg_packager.py` |
-| `inspect_deck.py` | Fast diagnostic CLI. Crops a single card pair to verify cut math and duplex alignment.
-
- | `python inspect_deck.py [optional_pdf]` |
-| `config.json` | Declarative project schema: paths, DPI, match rules, and preset grid definitions.
-
- | Loaded at runtime |
+| `gui_app.py` | Complete desktop dashboard with 4-step wizard and live visual calibration. | `python gui_app.py` (or `run_app.bat`) |
+| `deck_processor.py` | Vector extraction engine. Renders card pairs from PDF according to grid profiles. | `python deck_processor.py` |
+| `ttpg_packager.py` | Compiles card pairs into atlases and generates unified TTPG <GUID>Card.json templates. | `python ttpg_packager.py` |
+| `inspect_deck.py` | Fast diagnostic CLI. Crops a single card pair to verify cut math and duplex alignment. | `python inspect_deck.py [optional_pdf]` |
+| `config.json` | Declarative project schema: paths, DPI, match rules, and preset grid definitions. | Loaded at runtime |
 | `deck.json` | *(Optional)* Local folder override for custom physics, metadata, or grid offsets. | Merged hierarchically |
 
 ---
