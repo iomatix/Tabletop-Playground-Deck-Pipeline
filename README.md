@@ -1,12 +1,8 @@
 # Tabletop Playground (TTPG) Deck Pipeline
 
-[![Platform - Windows](https://img.shields.io/badge/Platform-Windows%20x64-0078D6?logo=windows&logoColor=white)](#choose-your-distribution)
-[![Runtime - Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](#choose-your-distribution)
-[![Release](https://img.shields.io/github/v/release/iomatix/Tabletop-Playground-Deck-Pipeline?color=2ea44f)](https://github.com/iomatix/Tabletop-Playground-Deck-Pipeline/releases/latest)
-
 Automated extraction, texture atlas compilation, and packaging pipeline for custom card decks and guidebooks in **Tabletop Playground** (Unreal Engine).
 
-```
+```text
    [ Source PDFs ]               _INPUT/<Package>/<Deck>.pdf
           │
           ▼  (deck_processor.py / PyMuPDF)
@@ -23,8 +19,6 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 
 > [!NOTE]
 > In the extraction path `card_###_[front|back].png`, `###` denotes the **1-based sequential card index** within that specific deck folder (padded to a minimum of 3 digits, e.g., `card_001_front.png`, dynamically expanding to `card_1000_front.png` for decks $\ge 1000$ items), not a physical page number.
-> 
-> 
 
 ---
 
@@ -33,12 +27,8 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 > * **Deterministic Physics (SoC):** Card dimensions (`Width`, `Height`) are calculated dynamically from pixel boundaries and DPI: $size_{cm} = \frac{pixels}{dpi} \times 2.54$. No hardcoded magic numbers.
 > * **Native Multi-Sheet Decks:** Decks exceeding TTPG grid capacity (100 cards / $10 \times 10$ max cells) or GPU texture boundaries (8192 px) compile into a single unified Card template using `ExtraFrontTextures` and `ExtraBackTextures`, preventing split stacks in-game.
 > * **Contract-Driven Pipeline (`deck_meta.json`):** Downstream tools receive exact classification (`card_deck` vs. `document`) directly from the extraction phase, eliminating brittle string heuristics.
-> 
-> 
 > * **Context-Aware Naming & Tooltips:** In-game objects are prefixed with package hierarchy (`[Bridge Expansion Set] Lore Master's Deck Guidebook`), and cards held in hand display distinct hover labels (`Deck #001`, `Guidebook - Page 1`).
 > * **Strict Allow-List:** Only PDFs explicitly matching rules in `config.json` are processed; print/assembly guides and alternate eco cuts are ignored by default.
-> 
-> 
 > 
 > 
 
@@ -63,26 +53,39 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 | `deck_meta.json` | *(Generated)* Intermediate contract stored in each `_OUTPUT` subfolder detailing item classification (`card_deck` or `document`), grid dimensions, and item counts. | Emitted by processor |
 | `deck.json` | *(Optional)* Local folder override for custom physics, metadata, or grid offsets. | Merged hierarchically |
 
-
 ---
 
 ## Quick Start
 
 ### Choose Your Distribution
 
-* **Standalone Executable (`TTPG-Deck-Pipeline-Windows.zip`)**: Ready out of the box for Windows x64. Includes all GUI dependencies, native OS integration, and an isolated runtime. **Zero Python or pip installation required.**
-* **Portable Source (`TTPG-Deck-Pipeline-Source.zip`)**: Lightweight, cross-platform Python distribution. Requires Python 3.10+ in a standard environment.
+#### Option A: Standalone Executable (Windows x64)
 
-### 1. Requirements & Installation
+* Download `TTPG-Deck-Pipeline-Windows.zip` from [Releases](https://github.com/iomatix/Tabletop-Playground-Deck-Pipeline/releases/latest).
+* Extract the archive and launch `TTPG-Deck-Pipeline.exe`.
+* **Zero dependencies:** Bundles Python runtime, UI engine, and OS integrations out of the box.
 
-Python 3.10+ is required. Install dependencies:
+#### Option B: Portable Source (Cross-Platform)
+
+* Download `TTPG-Deck-Pipeline-Source.zip` (or clone this repository).
+* Requires **Python 3.10+ (Standard Win32 / macOS / Linux)**.
+
+> [!WARNING]
+> **Windows Users:** Do NOT use the Microsoft Store version of Python (`PythonSoftwareFoundation`). Its UWP sandbox activates filesystem virtualization, redirecting writes away from `%LOCALAPPDATA%\TabletopPlayground`. Always use the official installer from [python.org](https://www.google.com/search?q=https://www.python.org/) or install via `winget install Python.Python.3.13`.
+
+---
+
+### 1. Requirements & Installation (Source Distribution)
+
+Install production and diagnostic dependencies via `requirements.txt`:
 
 ```bash
-pip install pymupdf pillow nicegui
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 
 ```
 
-(Or double-click `run_app.bat` on Windows to check and launch automatically).
+*(On Windows, you can also double-click `run_app.bat` to verify environment and launch automatically).*
 
 ### 2. Add Source PDFs
 
@@ -98,12 +101,14 @@ _INPUT/
 
 ### 3. Run Pipeline via GUI
 
+Launch the desktop management interface:
+
 ```bash
 python gui_app.py
 
 ```
 
-Open `[http://127.0.0.1:8080](http://127.0.0.1:8080)`. The interface includes two dedicated modules:
+Access the UI at `[http://127.0.0.1:8080](http://127.0.0.1:8080)`. The interface provides three dedicated modules:
 
 #### Tab 1: Pipeline & Build (4-Step Wizard)
 
@@ -192,25 +197,19 @@ The global configuration governs default paths, raster DPI, filename matching ru
 ### Rules & Suffix Stripping
 
 * **`strip_suffix`**: Trailing text removed from the PDF stem when naming the output folder.
-
-
 * `"_HQ Cards"`: Converts `Deck_HQ Cards.pdf` into folder name `Deck`.
-
-
 * `""` (empty string): **No suffix removal**; the output directory retains the clean PDF stem.
-
-
-
-
 
 ### Profiles Breakdown
 
 * **`model`**: `"Rounded"` (playing cards) or `"Square"` (tiles, manuals, full-page sheets).
 * **`thickness_cm`**: Physical card thickness in centimeters (default: `0.05` for cards, `0.03` for guidebooks).
 * **`duplex_flip`**: Duplex binding transform, dependent on PDF page orientation (Portrait vs. Landscape):
-  * `"horizontal"`: Back side columns are mirrored (`cols - 1 - col`). Standard for portrait pages flipped along the long edge, or landscape pages flipped along the short edge.
-  * `"vertical"`: Back side rows are mirrored (`rows - 1 - row`). Standard for "calendar-style" flips along the opposing edge.
-  * `"none"`: Front and back use the exact same grid coordinates (for single-sided cards or uniform multi-page manuals).
+* `"horizontal"`: Back side columns are mirrored (`cols - 1 - col`). Standard for portrait pages flipped along the long edge, or landscape pages flipped along the short edge.
+* `"vertical"`: Back side rows are mirrored (`rows - 1 - row`). Standard for "calendar-style" flips along the opposing edge.
+* `"none"`: Front and back use the exact same grid coordinates (for single-sided cards or uniform multi-page manuals).
+
+
 * **`grid`**: PDF coordinate geometry measured in standard PostScript points ($1\text{ pt} = \frac{1}{72}\text{ inch}$):
 * `cols` / `rows`: Grid cells per page.
 * `card_width_pt` / `card_height_pt`: Card cut boundaries.
@@ -219,12 +218,8 @@ The global configuration governs default paths, raster DPI, filename matching ru
 
 
 
-
-
 > [!WARNING]
 > PostScript points are fixed at $72\text{ pt/inch}$ within PDF specifications. The actual raster resolution in pixels is governed by the top-level `"dpi"` setting. Ensure grid measurements match the authoring vector coordinates, not raster-downsampled values.
-> 
-> 
 
 ---
 
@@ -293,11 +288,7 @@ During extraction, `deck_processor.py` writes a structured contract into each de
 Supported values for `item_type`:
 
 * `"card_deck"`: Standard multi-card grid. Applies rounded card physics and `#001` sequential naming.
-
-
 * `"document"`: Single-sheet or booklet format ($1 \times 1$ grid). Applies square edges, thinner collision, and `Page X` naming.
-
-
 
 ### Context-Aware Naming & In-Game Tooltips
 
@@ -330,8 +321,6 @@ Vector-to-raster clipping in PyMuPDF with fractional PostScript offsets ($80.95\
 > **Fail-Fast Trigger Conditions**
 > The pipeline aborts execution (`sys.exit(1)`) when:
 > * An odd page count is detected in double-sided card decks (`item_type: "card_deck"`). Single-page and full-page documents (`item_type: "document"`, $1 \times 1$ grid) are **exempt** from this check.
-> 
-> 
 > * Individual card pixel sizes deviate beyond the $\pm 2\text{ px}$ jitter threshold.
 > * Card dimensions exceed hardware texture limits ($> 8192\text{ px}$).
 > * Duplex card backs are missing corresponding front cards.
