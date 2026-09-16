@@ -1,6 +1,6 @@
 {
   "default_profile": "story_engine_standard",
-  "dpi": 200,
+  "dpi": 250,
   "export_format": "png",
   "dirs": {
     "input": "_INPUT",
