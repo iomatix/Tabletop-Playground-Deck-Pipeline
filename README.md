@@ -44,7 +44,12 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 
 | File | Role | Execution |
 | --- | --- | --- |
-| `gui_app.py` | Complete desktop dashboard with 4-step wizard and live visual calibration. | `python gui_app.py` (or `run_app.bat`) |
+| `gui_app.py` | Desktop management interface (NiceGUI entry point, lifecycle & event loop patches). | `python gui_app.py` (or `run_app.bat`) |
+| `app/state.py` | Global state, config persistence, and multi-language engine (`en` / `pl`). | Core module |
+| `app/pdf_analyzer.py` | 1D differential cut analyzer, vector inspector & throttled SVG overlay generator. | Core module |
+| `app/views/calibrator.py` | Visual grid calibrator with 2-Click calibration and conflict-free keyboard shortcuts. | View component |
+| `app/views/wizard.py` | Asynchronous 4-step pipeline runner (Configuration → Extraction → Compilation → Install). | View component |
+| `locales/*.json` | Internationalization bundles (`en.json`, `pl.json`). | Runtime asset |
 | `deck_processor.py` | Vector extraction engine. Renders card pairs from PDF according to grid profiles and emits `deck_meta.json`. | `python deck_processor.py` |
 | `ttpg_packager.py` | Compiles card pairs into atlases and generates unified TTPG `<GUID>Card.json` templates with per-card hover tooltips (`CardNames`) and stack names (`Name`). | `python ttpg_packager.py` |
 | `inspect_deck.py` | Fast diagnostic CLI. Crops a single card pair to verify cut math, margins, and duplex alignment. | `python inspect_deck.py [optional_pdf]` |
@@ -87,18 +92,31 @@ python gui_app.py
 
 ```
 
-Open `[http://127.0.0.1:8080](http://127.0.0.1:8080)` (default port; NiceGUI will bind to the next available port if 8080 is occupied). The interface guides you through:
+Open `[http://127.0.0.1:8080](http://127.0.0.1:8080)`. The interface includes two dedicated modules:
 
-1. **Configuration:** Set package name and export DPI.
+#### Tab 1: Pipeline & Build (4-Step Wizard)
+
+1. **Configuration:** Set package metadata, export DPI, and verify working directories.
+2. **PDF Extraction:** Runs `deck_processor.py` asynchronously with real-time log streaming.
+3. **TTPG Compilation:** Runs `ttpg_packager.py` to compile atlases and generate manifests.
+4. **Installation:** Direct deployment into `%LOCALAPPDATA%\TabletopPlayground\Packages`.
+
+#### Tab 2: Visual Grid Calibrator (v1.1.0)
+
+* **Auto-Detect Grid:** Runs 1D differential clustering directly on PDF vector cut lines.
+* **2-Click Calibration:**
+* **Single Card #1:** Click Card #1 top-left, then bottom-right (calculates origin, width, height, and resets gutters to 0).
+* **Full Grid:** Click Card #1 top-left, then bottom-right of the last card in the grid (divides bounding box across cols and rows).
 
 
-2. **Extraction:** Run `deck_processor.py` with real-time log streaming.
+* **Direct Keyboard Nudge (Conflict-Free):**
+* **Origin (X/Y):** `Arrow Keys` (hold `Shift` for fine 0.1 pt micro-steps)
+* **Card Dimensions (W/H):** `W` / `A` / `S` / `D`
+* **Gutters (X/Y):** `J` / `L` / `I` / `K`
+* **Columns & Rows:** `[` / `]` (cols), `;` / `'` (rows)
 
 
-3. **Packaging:** Run `ttpg_packager.py` to bake texture atlases and card templates.
-
-
-4. **Installation:** Click **Install Directly to TTPG** to copy the mod to your local game directory.
+* **Save Profile:** Writes calibrated presets straight to `config.json`.
 
 
 
