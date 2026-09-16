@@ -292,6 +292,11 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                     TTPG_PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
                     install_log.push(f"[FS] Target base ensured: {TTPG_PACKAGES_DIR}")
 
+                    # Delete old assets to prevent duplicates in the game
+                    if target_dest.exists():
+                        install_log.push(f"[CLEAN] Purging existing target assets in: {target_dest.name}")
+                        shutil.rmtree(target_dest)
+
                     target_dest.mkdir(parents=True, exist_ok=True)
 
                     total_copied = 0
