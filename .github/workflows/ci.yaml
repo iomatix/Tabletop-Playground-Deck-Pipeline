@@ -1,0 +1,63 @@
+name: CI & Release Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Run Smoke Tests & Lint Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Execute Pytest
+        run: |
+          pytest -v tests/
+
+  release:
+    name: Build & Publish Release
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Bundle Release ZIP
+        run: |
+          # Package repository into clean archive excluding runtime artifacts and caches
+          zip -r ttpg-pipeline-${{ github.ref_name }}.zip . \
+            -x "*.git*" \
+            -x ".build_cache.json" \
+            -x "_OUTPUT/*" \
+            -x "_PACKAGE/*" \
+            -x "_DIAGNOSTICS/*" \
+            -x "__pycache__/*" \
+            -x "*/__pycache__/*" \
+            -x "tests/*"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ttpg-pipeline-${{ github.ref_name }}.zip
+          generate_release_notes: true
