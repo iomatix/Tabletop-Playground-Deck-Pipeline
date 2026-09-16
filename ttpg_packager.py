@@ -13,6 +13,7 @@ import json
 import re
 import sys
 import uuid
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final, Optional
@@ -26,6 +27,7 @@ MAX_TEXTURE_DIMENSION: Final[int] = 8192
 MAX_GRID_CELLS: Final[int] = 100
 MAX_GRID_AXIS_CELLS: Final[int] = 10
 CENTIMETERS_PER_INCH: Final[float] = 2.54
+MAX_JITTER_TOLERANCE_PX: Final[int] = 2
 
 DEFAULT_CARD_THICKNESS_CM: Final[float] = 0.05
 DEFAULT_GUIDEBOOK_THICKNESS_CM: Final[float] = 0.03
@@ -138,7 +140,6 @@ class ContextResolver:
 
         overrides = self._collect_hierarchical_overrides(deck_dir)
 
-        # Match against predefined rules if profile not explicitly specified in deck.json
         matched_profile = overrides.get("profile")
         if not matched_profile:
             matched_profile = self._match_rule_profile(deck_name, is_guidebook)
@@ -158,7 +159,6 @@ class ContextResolver:
         return metadata, overrides
 
     def _collect_hierarchical_overrides(self, deck_dir: Path) -> dict[str, Any]:
-        """Cascades overrides from parent directories up to input root."""
         rel_path = deck_dir.relative_to(self.output_dir)
         check_path = self.input_dir / rel_path
         hierarchy: list[Path] = []
@@ -170,7 +170,6 @@ class ContextResolver:
                 hierarchy.append(deck_json)
             curr = curr.parent
 
-        # Merge from top-level to closest leaf
         merged: dict[str, Any] = {}
         for config_file in reversed(hierarchy):
             try:
@@ -210,25 +209,17 @@ class PhysicsEngine:
         metadata: DeckMetadata,
         overrides: dict[str, Any],
     ) -> PhysicalDimensions:
-        # Deterministic formula: size_cm = (pixels / dpi) * 2.54
         calculated_width = round((pixel_width / self.dpi) * CENTIMETERS_PER_INCH, 4)
         calculated_height = round((pixel_height / self.dpi) * CENTIMETERS_PER_INCH, 4)
 
         profile = self.profiles.get(metadata.profile_name, {})
 
-        # 1. Width / Height: overrides -> profile -> calculated from image pixels
-        width = (
-            overrides.get("card_width_cm")
-            or profile.get("card_width_cm")
-            or calculated_width
-        )
-        height = (
-            overrides.get("card_height_cm")
-            or profile.get("card_height_cm")
-            or calculated_height
-        )
+        raw_w = overrides.get("card_width_cm") or profile.get("card_width_cm")
+        width = calculated_width if raw_w in (None, "auto") else raw_w
 
-        # 2. Thickness: overrides -> profile -> domain defaults
+        raw_h = overrides.get("card_height_cm") or profile.get("card_height_cm")
+        height = calculated_height if raw_h in (None, "auto") else raw_h
+
         default_thickness = (
             DEFAULT_GUIDEBOOK_THICKNESS_CM
             if metadata.is_guidebook
@@ -240,7 +231,6 @@ class PhysicsEngine:
             or default_thickness
         )
 
-        # 3. Model: overrides -> profile -> domain defaults
         default_model = (
             DEFAULT_GUIDEBOOK_MODEL
             if metadata.is_guidebook
@@ -281,7 +271,6 @@ class GridLayoutOptimizer:
         max_cols, max_rows = cls.calculate_bounds(card_w, card_h)
         max_capacity = min(MAX_GRID_CELLS, max_cols * max_rows)
 
-        # For multi-sheet decks, enforce uniform maximum grid dimensions across all sheets
         if total_cards > max_capacity:
             return GridDimensions(cols=max_cols, rows=max_rows)
 
@@ -307,7 +296,7 @@ class GridLayoutOptimizer:
 # Texture Atlas Builder
 # ---------------------------------------------------------------------------
 class TextureAtlasBuilder:
-    """Builds and serializes front and back texture sheets in lockstep."""
+    """Builds and serializes front and back texture sheets in lockstep with auto-normalization."""
 
     def __init__(self, textures_dir: Path) -> None:
         self.textures_dir = textures_dir
@@ -316,13 +305,13 @@ class TextureAtlasBuilder:
         self,
         chunk: list[CardPair],
         grid: GridDimensions,
-        card_w: int,
-        card_h: int,
+        canonical_w: int,
+        canonical_h: int,
         front_filename: str,
         back_filename: str,
     ) -> tuple[Path, Path]:
-        sheet_w = grid.cols * card_w
-        sheet_h = grid.rows * card_h
+        sheet_w = grid.cols * canonical_w
+        sheet_h = grid.rows * canonical_h
 
         atlas_front = Image.new("RGB", (sheet_w, sheet_h), (255, 255, 255))
         atlas_back = Image.new("RGB", (sheet_w, sheet_h), (255, 255, 255))
@@ -330,12 +319,16 @@ class TextureAtlasBuilder:
         for idx, pair in enumerate(chunk):
             col = idx % grid.cols
             row = idx // grid.cols
-            pos = (col * card_w, row * card_h)
+            pos = (col * canonical_w, row * canonical_h)
 
             with Image.open(pair.front_path) as im_f:
+                if im_f.size != (canonical_w, canonical_h):
+                    im_f = im_f.resize((canonical_w, canonical_h), Image.Resampling.LANCZOS)
                 atlas_front.paste(im_f, pos)
 
             with Image.open(pair.back_path) as im_b:
+                if im_b.size != (canonical_w, canonical_h):
+                    im_b = im_b.resize((canonical_w, canonical_h), Image.Resampling.LANCZOS)
                 atlas_back.paste(im_b, pos)
 
         front_path = self.textures_dir / front_filename
@@ -515,6 +508,38 @@ class PackageOrchestrator:
 
         return pairs
 
+    def _resolve_canonical_dimensions(self, deck_name: str, pairs: list[CardPair]) -> tuple[int, int]:
+        """
+        Determines canonical dimensions using statistical mode across all cards.
+        Enforces strict Fail-Fast for true deviations (> 2px) while auto-tolerating
+        sub-pixel floating point rasterization jitter (<= 2px).
+        """
+        observed_sizes: list[tuple[int, int]] = []
+        for pair in pairs:
+            with Image.open(pair.front_path) as f_img:
+                observed_sizes.append(f_img.size)
+            with Image.open(pair.back_path) as b_img:
+                observed_sizes.append(b_img.size)
+
+        # Most frequent dimension across the entire set
+        canonical_w, canonical_h = Counter(observed_sizes).most_common(1)[0][0]
+
+        for pair in pairs:
+            for side_name, side_path in (("front", pair.front_path), ("back", pair.back_path)):
+                with Image.open(side_path) as img:
+                    dw = abs(img.width - canonical_w)
+                    dh = abs(img.height - canonical_h)
+                    if dw > MAX_JITTER_TOLERANCE_PX or dh > MAX_JITTER_TOLERANCE_PX:
+                        print(
+                            f"[FAIL-FAST] Dimension anomaly in {deck_name}: {side_path.name} "
+                            f"has size {img.size}, expected {canonical_w}x{canonical_h} px "
+                            f"(deviation exceeds {MAX_JITTER_TOLERANCE_PX}px threshold).",
+                            file=sys.stderr,
+                        )
+                        sys.exit(1)
+
+        return canonical_w, canonical_h
+
     def process_deck(self, deck_dir: Path) -> None:
         pairs = self.validate_and_collect_pairs(deck_dir)
         if not pairs:
@@ -523,28 +548,7 @@ class PackageOrchestrator:
         deck_name = deck_dir.name
         meta, overrides = self.context_resolver.resolve_deck_context(deck_dir)
 
-        # Dimension integrity verification
-        with Image.open(pairs[0].front_path) as sample:
-            card_w, card_h = sample.size
-
-        for pair in pairs:
-            with Image.open(pair.front_path) as f_img:
-                if f_img.size != (card_w, card_h):
-                    print(
-                        f"[FAIL-FAST] Dimension anomaly in {deck_name}: {pair.front_path.name} "
-                        f"has size {f_img.size}, expected {(card_w, card_h)}",
-                        file=sys.stderr,
-                    )
-                    sys.exit(1)
-
-            with Image.open(pair.back_path) as b_img:
-                if b_img.size != (card_w, card_h):
-                    print(
-                        f"[FAIL-FAST] Dimension anomaly in {deck_name}: {pair.back_path.name} "
-                        f"has size {b_img.size}, expected {(card_w, card_h)}",
-                        file=sys.stderr,
-                    )
-                    sys.exit(1)
+        card_w, card_h = self._resolve_canonical_dimensions(deck_name, pairs)
 
         total_cards = len(pairs)
         grid = GridLayoutOptimizer.optimize(total_cards, card_w, card_h)
