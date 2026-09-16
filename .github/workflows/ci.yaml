@@ -59,7 +59,7 @@ jobs:
 
       - name: Compile Executable via PyInstaller
         run: |
-          pyinstaller --noconfirm --onedir --windowed `
+          pyinstaller --noconfirm --onedir --console `
             --name "TTPG-Deck-Pipeline" `
             --add-data "locales;locales" `
             --add-data "config.json;." `
