@@ -19,6 +19,7 @@ with open(CONFIG_PATH, "r", encoding="utf-8") as f:
 ttpg_cfg = cfg.get("ttpg", {})
 package_name = ttpg_cfg.get("package_name", "The Story Engine Universe")
 output_root = BASE_DIR / cfg.get("dirs", {}).get("output", "_OUTPUT")
+input_root = BASE_DIR / cfg.get("dirs", {}).get("input", "_INPUT")
 package_dest = BASE_DIR / ttpg_cfg.get("output_dir", "_PACKAGE") / package_name
 
 templates_dir = package_dest / "Templates"
@@ -30,8 +31,10 @@ for folder in [templates_dir, textures_dir]:
 MAX_TEX_DIM = 8192
 MAX_GRID_CELLS = 100
 
+
 def sanitize_name(name: str) -> str:
     return re.sub(r'[^a-zA-Z0-9_-]', '_', name).strip('_')
+
 
 def calculate_optimal_grid(n: int, card_w: int, card_h: int) -> tuple[int, int]:
     max_cols = max(1, min(10, MAX_TEX_DIM // card_w))
@@ -56,16 +59,83 @@ def calculate_optimal_grid(n: int, card_w: int, card_h: int) -> tuple[int, int]:
 
     return best_c, best_r
 
+
+def resolve_deck_metadata(deck_dir: Path, out_root: Path) -> dict:
+    rel_parts = deck_dir.relative_to(out_root).parts
+    
+    universe = rel_parts[0] if len(rel_parts) > 1 else "Core"
+    category = rel_parts[1] if len(rel_parts) > 2 else ""
+    deck_title = rel_parts[-1]
+
+    meta = {
+        "universe": universe,
+        "category": category,
+        "deck_name": deck_title,
+        "description": f"Deck from '{universe}'" + (f" ({category})" if category else ""),
+        "type": "guidebook" if "guidebook" in deck_title.lower() else "card_deck"
+    }
+
+    # Poszukiwanie lokalnego pliku deck.json w _INPUT
+    candidate_paths = [
+        input_root / deck_dir.relative_to(out_root) / "deck.json",
+        input_root / deck_dir.relative_to(out_root).parent / "deck.json"
+    ]
+
+    for p in candidate_paths:
+        if p.exists():
+            try:
+                with open(p, "r", encoding="utf-8") as jf:
+                    overrides = json.load(jf)
+                    if "meta" in overrides:
+                        meta.update(overrides["meta"])
+                break
+            except Exception as e:
+                print(f"[WARN] Could not parse metadata from {p}: {e}", file=sys.stderr)
+
+    return meta
+
+
 def build_card_template(
     guid: str,
-    name: str,
+    deck_dir: Path,
     front_tex: str,
     back_tex: str,
     cols: int,
     rows: int,
     indices: list[int],
-    is_guidebook: bool
+    is_guidebook: bool,
+    sheet_idx: int = 1,
+    total_sheets: int = 1,
+    total_deck_cards: int = 0
 ) -> dict:
+    meta = resolve_deck_metadata(deck_dir, output_root)
+    universe = meta["universe"]
+    deck_name = meta["deck_name"]
+
+    # Formatowanie nazwy i etykiet TTPG
+    sheet_suffix = f" (Sheet {sheet_idx}/{total_sheets})" if total_sheets > 1 else ""
+    display_name = f"[{universe}] {deck_name}{sheet_suffix}" if universe.lower() not in deck_name.lower() else f"{deck_name}{sheet_suffix}"
+    tooltip = f"{universe} • {deck_name}"
+
+    if is_guidebook:
+        tooltip += " (Guidebook)"
+        description = f"Official Guidebook / Rulesheet for '{deck_name}'.\nUniverse: {universe}.\nPages: {total_deck_cards}."
+    else:
+        description = f"Expansion deck for {universe}: '{deck_name}'.\nTotal cards in set: {total_deck_cards}."
+
+    # Ustrukturyzowane metadane JSON pod skrypty TTPG (Lua/JS)
+    structured_metadata = json.dumps({
+        "system": package_name,
+        "universe": universe,
+        "category": meta.get("category", ""),
+        "deck": deck_name,
+        "is_guidebook": is_guidebook,
+        "sheet": sheet_idx,
+        "total_sheets": total_sheets,
+        "card_count": len(indices),
+        "total_deck_cards": total_deck_cards
+    }, ensure_ascii=False)
+
     width = 21.59 if is_guidebook else 7.62
     height = 27.94 if is_guidebook else 7.62
     thickness = 0.04 if is_guidebook else 0.05
@@ -74,11 +144,11 @@ def build_card_template(
     return {
         "Type": "Card",
         "GUID": guid,
-        "Name": name,
+        "Name": display_name,
         "ScriptName": "",
-        "Metadata": "",
-        "TooltipName": "",
-        "Description": "",
+        "Metadata": structured_metadata,
+        "TooltipName": tooltip,
+        "Description": description,
         "CollisionType": "Regular",
         "Friction": 0.7,
         "Restitution": 0,
@@ -102,7 +172,7 @@ def build_card_template(
         "UseCustomZoomViewDirection": False,
         "ZoomViewDirection": {"X": 0, "Y": 0, "Z": 1},
         "GroundAccessibility": "ZoomAndContext",
-        "Tags": [],
+        "Tags": [universe, "Guidebook" if is_guidebook else "Deck"],
         "TemplateUIs": [],
         "uiOptions": [],
         "FrontTexture": front_tex,
@@ -133,12 +203,14 @@ def build_card_template(
         "CardTags": {}
     }
 
+
 def find_deck_directories(root: Path) -> list[Path]:
     deck_dirs = []
     for path in sorted(root.rglob("*")):
         if path.is_dir() and any(path.glob("card_*_front.png")):
             deck_dirs.append(path)
     return deck_dirs
+
 
 def process_deck(deck_dir: Path):
     front_files = sorted(
@@ -170,15 +242,16 @@ def process_deck(deck_dir: Path):
 
     total_cards = len(card_pairs)
     chunks = [card_pairs[i:i + max_per_sheet] for i in range(0, total_cards, max_per_sheet)]
+    total_sheets = len(chunks)
 
-    print(f"\n[PACKAGE] {deck_name} | Cards: {total_cards} | Format: {'Guidebook A4' if is_guidebook else 'Card 3x3'}")
+    print(f"\n[PACKAGE] {deck_name} | Cards: {total_cards} | Format: {'Guidebook' if is_guidebook else 'Card'}")
 
     clean_deck = sanitize_name(deck_name)
 
     for sheet_idx, chunk in enumerate(chunks, start=1):
         num_cards = len(chunk)
         cols, rows = calculate_optimal_grid(num_cards, card_w, card_h)
-        sheet_suffix = f"_{sheet_idx:02d}" if len(chunks) > 1 else ""
+        sheet_suffix = f"_{sheet_idx:02d}" if total_sheets > 1 else ""
 
         front_tex_name = f"{clean_deck}{sheet_suffix}_front.png"
         back_tex_name = f"{clean_deck}{sheet_suffix}_back.png"
@@ -204,23 +277,26 @@ def process_deck(deck_dir: Path):
         print(f"  [+] Generated sheet {cols}x{rows}: {front_tex_name}")
 
         card_guid = uuid.uuid4().hex.upper()
-        template_name = f"{deck_name} (Sheet {sheet_idx})" if len(chunks) > 1 else deck_name
         indices = list(range(num_cards))
 
         template_data = build_card_template(
             guid=card_guid,
-            name=template_name,
+            deck_dir=deck_dir,
             front_tex=front_tex_name,
             back_tex=back_tex_name,
             cols=cols,
             rows=rows,
             indices=indices,
-            is_guidebook=is_guidebook
+            is_guidebook=is_guidebook,
+            sheet_idx=sheet_idx,
+            total_sheets=total_sheets,
+            total_deck_cards=total_cards
         )
 
         template_file = templates_dir / f"{card_guid}Card.json"
         with open(template_file, "w", encoding="utf-8") as tf:
             json.dump(template_data, tf, indent=2)
+
 
 def generate_manifest():
     manifest_path = package_dest / "Manifest.json"
@@ -233,6 +309,7 @@ def generate_manifest():
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
     print(f"[OK] Saved Manifest.json with GUID: {manifest_guid}")
+
 
 def main():
     deck_dirs = find_deck_directories(output_root)
@@ -249,6 +326,7 @@ def main():
         process_deck(d)
 
     print(f"\n[SUCCESS] Package ready: {package_dest}")
+
 
 if __name__ == "__main__":
     main()
