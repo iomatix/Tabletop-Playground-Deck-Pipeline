@@ -1,21 +1,16 @@
 name: CI & Release Pipeline
 
-permissions:
-  contents: write
-
 on:
   push:
-    branches: [ main, master ]
-    tags:
-      - 'v*'
+    branches: [ "main" ]
+    tags: [ "v*.*.*" ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ "main" ]
 
 jobs:
   test:
-    name: Run Smoke Tests & Lint Check
+    name: Run Tests & Linters
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -23,16 +18,16 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
+          python-version: "3.13"
+          cache: "pip"
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pytest ruff
+          pip install ruff pytest
 
-      - name: Execute Linter (Ruff)
+      - name: Execute Static Analysis (Ruff)
         run: |
           ruff check .
 
@@ -40,31 +35,42 @@ jobs:
         run: |
           pytest -v tests/
 
-  release:
-    name: Build & Publish Release
+  build-windows-exe:
+    name: Build Standalone Windows Executable
     needs: test
     if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-
+    runs-on: windows-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Bundle Release ZIP
-        run: |
-          # Package repository into clean archive excluding runtime artifacts and caches
-          zip -r ttpg-pipeline-${{ github.ref_name }}.zip . \
-            -x "*.git*" \
-            -x ".build_cache.json" \
-            -x "_OUTPUT/*" \
-            -x "_PACKAGE/*" \
-            -x "_DIAGNOSTICS/*" \
-            -x "__pycache__/*" \
-            -x "*/__pycache__/*" \
-            -x "tests/*"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
 
-      - name: Create GitHub Release
+      - name: Install Build Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Compile Executable via PyInstaller
+        run: |
+          pyinstaller --noconfirm --onedir --windowed `
+            --name "TTPG-Deck-Pipeline" `
+            --add-data "locales;locales" `
+            --add-data "config.json;." `
+            --collect-all nicegui `
+            gui_app.py
+
+      - name: Compress Build Artifact
+        run: |
+          Compress-Archive -Path dist/TTPG-Deck-Pipeline -DestinationPath dist/TTPG-Deck-Pipeline-Windows.zip
+
+      - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          files: ttpg-pipeline-${{ github.ref_name }}.zip
-          generate_release_notes: true
+          files: dist/TTPG-Deck-Pipeline-Windows.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
