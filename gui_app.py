@@ -669,5 +669,41 @@ def render_dashboard() -> None:
             ui.timer(0.1, load_selected_pdf_preview, once=True)
 
 
+# ---------------------------------------------------------------------------
+# Windows Proactor Socket Reset Suppression & App Runner
+# ---------------------------------------------------------------------------
+def patch_windows_proactor_loop() -> None:
+    """Silences noisy WinError 10054 (ConnectionResetError) on Windows Proactor EventLoop."""
+    if sys.platform == "win32":
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        original_handler = loop.get_exception_handler()
+
+        def connection_reset_exception_handler(current_loop: asyncio.AbstractEventLoop, context: dict[str, Any]) -> None:
+            exc = context.get("exception")
+            # Intercept and suppress abrupt client disconnects on Windows sockets
+            if isinstance(exc, ConnectionResetError) or (isinstance(exc, OSError) and getattr(exc, "winerror", None) == 10054):
+                return
+            if original_handler:
+                original_handler(current_loop, context)
+            else:
+                current_loop.default_exception_handler(context)
+
+        loop.set_exception_handler(connection_reset_exception_handler)
+
+
 render_dashboard()
-ui.run(title="TTPG Deck Pipeline Manager", native=False, port=8080, reload=False)
+patch_windows_proactor_loop()
+
+# Bind explicitly to localhost (127.0.0.1) to avoid binding to dead link-local 169.254.x.x interfaces
+ui.run(
+    host="127.0.0.1",
+    port=8080,
+    title="TTPG Deck Pipeline Manager",
+    native=False,
+    reload=False,
+)
