@@ -4,7 +4,7 @@ Tabletop Playground (TTPG) Package & Deck Compiler.
 Handles multi-sheet texture atlas stitching, dynamic physics calculation
 from DPI and pixel dimensions, contract-driven metadata resolution (via deck_meta.json),
 hierarchical context-aware naming, safe clean-slate package state management,
-and UV-compliant partitioned TTPG Card template generation.
+and UV-compliant partitioned stacks.
 """
 
 from __future__ import annotations
@@ -34,6 +34,9 @@ DEFAULT_CARD_THICKNESS_CM: Final[float] = 0.05
 DEFAULT_DOCUMENT_THICKNESS_CM: Final[float] = 0.03
 DEFAULT_CARD_MODEL: Final[str] = "Rounded"
 DEFAULT_DOCUMENT_MODEL: Final[str] = "Square"
+
+DIR_TEMPLATES: Final[str] = "Templates"
+DIR_TEXTURES: Final[str] = "Textures"
 
 
 # ---------------------------------------------------------------------------
@@ -110,18 +113,21 @@ class ConfigurationManager:
         pkg_root = self.base_dir / ttpg_cfg.get("output_dir", "_PACKAGE")
         self.package_dest = pkg_root / self.package_name
 
-        self.templates_dir = self.package_dest / "Templates"
-        self.textures_dir = self.package_dest / "Textures"
+        self.templates_dir = self.package_dest / DIR_TEMPLATES
+        self.textures_dir = self.package_dest / DIR_TEXTURES
 
     def ensure_clean_package_staging(self) -> None:
-        """Purges old compiled assets to guarantee idempotency and eliminate orphaned templates."""
-        if self.templates_dir.exists():
-            shutil.rmtree(self.templates_dir)
-        if self.textures_dir.exists():
-            shutil.rmtree(self.textures_dir)
-
-        self.templates_dir.mkdir(parents=True, exist_ok=True)
-        self.textures_dir.mkdir(parents=True, exist_ok=True)
+        """Purges old compiled assets safely without removing locked root directories."""
+        for root_dir in (self.templates_dir, self.textures_dir):
+            root_dir.mkdir(parents=True, exist_ok=True)
+            for item in root_dir.iterdir():
+                try:
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                    else:
+                        item.unlink(missing_ok=True)
+                except Exception as exc:
+                    print(f"[WARN] Could not remove stale asset {item.name}: {exc}", file=sys.stderr)
 
     @staticmethod
     def _fail_fast(message: str) -> None:
@@ -180,9 +186,7 @@ class ContextResolver:
             package_context=package_context,
             deck_name=deck_name,
             display_name=display_name,
-            description=overrides.get(
-                "meta", {}
-            ).get(
+            description=overrides.get("meta", {}).get(
                 "description",
                 f"{'Document' if is_document else 'Deck'} from '{package_context or universe}': {deck_name}",
             ),
@@ -244,22 +248,10 @@ class PhysicsEngine:
         raw_h = overrides.get("card_height_cm") or profile.get("card_height_cm")
         height = calculated_height if raw_h in (None, "auto") else raw_h
 
-        default_thickness = (
-            DEFAULT_DOCUMENT_THICKNESS_CM
-            if metadata.is_document
-            else DEFAULT_CARD_THICKNESS_CM
-        )
-        thickness = (
-            overrides.get("thickness_cm")
-            or profile.get("thickness_cm")
-            or default_thickness
-        )
+        default_thickness = DEFAULT_DOCUMENT_THICKNESS_CM if metadata.is_document else DEFAULT_CARD_THICKNESS_CM
+        thickness = overrides.get("thickness_cm") or profile.get("thickness_cm") or default_thickness
 
-        default_model = (
-            DEFAULT_DOCUMENT_MODEL
-            if metadata.is_document
-            else DEFAULT_CARD_MODEL
-        )
+        default_model = DEFAULT_DOCUMENT_MODEL if metadata.is_document else DEFAULT_CARD_MODEL
         model = overrides.get("model") or profile.get("model") or default_model
 
         return PhysicalDimensions(
@@ -387,7 +379,6 @@ class TemplateFactory:
     ) -> dict[str, Any]:
         chunk_items = len(chunk)
 
-        # Contextual naming: Part suffix only when deck is partitioned
         part_suffix = f" (Part {part_index})" if total_parts > 1 else ""
         display_name = f"{meta.display_name}{part_suffix}"
         tooltip = f"{meta.package_context or meta.universe} • {meta.deck_name}{part_suffix}"
@@ -411,7 +402,14 @@ class TemplateFactory:
             slot_key = str(slot_idx)
             if meta.is_document:
                 card_names[slot_key] = f"{meta.deck_name} - Page {pair.index}"
-                card_metadata[slot_key] = json.dumps({"page": pair.index}, ensure_ascii=False)
+                card_metadata[slot_key] = json.dumps(
+                    {
+                        "deck": meta.deck_name,
+                        "page": pair.index,
+                        "is_document": True,
+                    },
+                    ensure_ascii=False,
+                )
             else:
                 card_names[slot_key] = f"{meta.deck_name} #{pair.index:03d}"
                 card_metadata[slot_key] = json.dumps(
@@ -515,7 +513,7 @@ class TemplateFactory:
 # Package Orchestrator
 # ---------------------------------------------------------------------------
 class PackageOrchestrator:
-    """Coordinates card pair validation, atlas compilation, and manifest production."""
+    """Coordinates card pair validation, atlas compilation, and manifests."""
 
     def __init__(self, config_mgr: ConfigurationManager) -> None:
         self.config_mgr = config_mgr
@@ -590,10 +588,7 @@ class PackageOrchestrator:
         total_items = len(pairs)
         grid = GridLayoutOptimizer.optimize(total_items, card_w, card_h)
 
-        chunks = [
-            pairs[i : i + grid.capacity]
-            for i in range(0, total_items, grid.capacity)
-        ]
+        chunks = [pairs[i : i + grid.capacity] for i in range(0, total_items, grid.capacity)]
         total_parts = len(chunks)
 
         print(
@@ -651,8 +646,7 @@ class PackageOrchestrator:
 
     def run(self) -> None:
         deck_directories: list[Path] = [
-            d for d in sorted(self.config_mgr.output_dir.rglob("*"))
-            if d.is_dir() and any(d.glob("card_*_front.png"))
+            d for d in sorted(self.config_mgr.output_dir.rglob("*")) if d.is_dir() and any(d.glob("card_*_front.png"))
         ]
 
         if not deck_directories:
@@ -662,7 +656,6 @@ class PackageOrchestrator:
             )
             sys.exit(1)
 
-        # Gwarancja czystego stanu: usuwamy stare szablony przed nowym pakowaniem
         self.config_mgr.ensure_clean_package_staging()
 
         print(f"[*] Compiling package: '{self.config_mgr.package_name}'")

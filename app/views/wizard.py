@@ -1,5 +1,8 @@
 """
 Pipeline Execution Stepper View (4-Step Wizard).
+
+Coordinates sequential deck processing: configuration, extraction, packaging,
+and TTPG package installation with strict UI state protection and diagnostic telemetry.
 """
 
 from __future__ import annotations
@@ -30,19 +33,22 @@ def check_package_ready(pkg_dir: str, pkg_name: str) -> tuple[bool, str]:
     textures_dir = target / "Textures"
 
     if not manifest.exists():
-        return False, "No Manifest.json found"
+        return False, t("status_no_manifest")
 
     n_templates = len(list(templates_dir.glob("*.json"))) if templates_dir.exists() else 0
     n_textures = len(list(textures_dir.glob("*.png"))) if textures_dir.exists() else 0
 
     if n_templates == 0 or n_textures == 0:
-        return False, f"Incomplete assets (Templates: {n_templates}, Textures: {n_textures})"
+        return False, f"{t('status_incomplete_assets')} (Templates: {n_templates}, Textures: {n_textures})"
 
-    return True, f"Found valid package ({n_templates} templates, {n_textures} textures)"
+    return True, f"{t('status_valid_package')} ({n_templates} templates, {n_textures} textures)"
+
 
 def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.select]]) -> None:
-    with ui.stepper().props("vertical").classes("w-full") as stepper:
+    with ui.stepper().props('vertical :header-nav="false"').classes("w-full") as stepper:
+        # -------------------------------------------------------------------
         # Step 1: Configuration
+        # -------------------------------------------------------------------
         with ui.step(t("step_1_title")):
             ui.markdown(t("step_1_desc"))
             with ui.grid(columns=2).classes("w-full"):
@@ -85,7 +91,9 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
             with ui.stepper_navigation():
                 ui.button(t("btn_save_and_next"), on_click=save_pipeline_settings).props("icon-right=arrow_forward")
 
+        # -------------------------------------------------------------------
         # Step 2: Extraction
+        # -------------------------------------------------------------------
         with ui.step(t("step_2_title")):
             ui.markdown(t("step_2_desc"))
             log_extract = ui.log().classes("w-full h-44 bg-grey-10 text-white font-mono text-caption")
@@ -99,7 +107,9 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                 selector = lang_selector_ref_getter()
                 if selector:
                     selector.disable()
+
                 btn_extract.disable()
+                btn_back_extract.disable()
 
                 state.execution_logs.clear()
                 log_extract.clear()
@@ -131,6 +141,7 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                     if selector:
                         selector.enable()
                     btn_extract.enable()
+                    btn_back_extract.enable()
 
             with ui.row():
                 btn_extract = ui.button(
@@ -146,9 +157,11 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                 ).props("outline")
 
             with ui.stepper_navigation():
-                ui.button(t("btn_back"), on_click=stepper.previous).props("flat")
+                btn_back_extract = ui.button(t("btn_back"), on_click=stepper.previous).props("flat")
 
-# Step 3: Packaging
+        # -------------------------------------------------------------------
+        # Step 3: Packaging
+        # -------------------------------------------------------------------
         with ui.step(t("step_3_title")):
             ui.markdown(t("step_3_desc"))
 
@@ -164,11 +177,11 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                 is_ready, msg = check_package_ready(pkg_dir_in.value, pkg_name_in.value)
                 pkg_status_label.text = msg
                 if is_ready:
-                    pkg_status_badge.text = "READY"
+                    pkg_status_badge.text = t("status_ready")
                     pkg_status_badge.props("color=positive")
                     btn_skip_to_install.enable()
                 else:
-                    pkg_status_badge.text = "NOT COMPILED"
+                    pkg_status_badge.text = t("status_not_compiled")
                     pkg_status_badge.props("color=grey-7")
                     btn_skip_to_install.disable()
                 return is_ready
@@ -188,7 +201,14 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                 selector = lang_selector_ref_getter()
                 if selector:
                     selector.disable()
+
                 btn_pack.disable()
+                btn_back_pack.disable()
+                btn_skip_to_install.disable()
+
+                pkg_status_badge.text = t("status_compiling")
+                pkg_status_badge.props("color=warning")
+                pkg_status_label.text = t("status_packaging_in_progress")
 
                 state.execution_logs.clear()
                 log_pack.clear()
@@ -216,11 +236,13 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                         stepper.next()
                     else:
                         ui.notify(t("notify_package_fail"), type="negative")
+                        refresh_package_status()
                 finally:
                     state.is_busy = False
                     if selector:
                         selector.enable()
                     btn_pack.enable()
+                    btn_back_pack.enable()
 
             with ui.row():
                 btn_pack = ui.button(
@@ -237,9 +259,11 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                 ).props("outline")
 
             with ui.stepper_navigation():
-                ui.button(t("btn_back"), on_click=stepper.previous).props("flat")
+                btn_back_pack = ui.button(t("btn_back"), on_click=stepper.previous).props("flat")
 
+        # -------------------------------------------------------------------
         # Step 4: Installation
+        # -------------------------------------------------------------------
         with ui.step(t("step_4_title")):
             ui.markdown(t("step_4_desc"))
 
@@ -247,52 +271,53 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
             install_log = ui.log().classes("w-full h-48 bg-grey-10 text-white font-mono text-caption q-my-sm rounded")
 
             def run_install_with_diagnostics() -> None:
+                btn_install_direct.disable()
                 install_log.clear()
                 install_log.push("[INIT] Starting installation sequence...")
 
-                raw_pkg_dir = Path(pkg_dir_in.value.strip())
-                raw_pkg_name = pkg_name_in.value.strip()
-
-                install_log.push(f"[DEBUG] Input pkg_dir: {raw_pkg_dir}")
-                install_log.push(f"[DEBUG] Input pkg_name: {raw_pkg_name}")
-                install_log.push(f"[DEBUG] TTPG_PACKAGES_DIR: {TTPG_PACKAGES_DIR}")
-
-                candidates: list[Path] = [
-                    BASE_DIR / raw_pkg_dir / raw_pkg_name,
-                    BASE_DIR / raw_pkg_dir,
-                    raw_pkg_dir if raw_pkg_dir.is_absolute() else (BASE_DIR / raw_pkg_dir),
-                ]
-
-                package_root = BASE_DIR / "_PACKAGE"
-                if package_root.exists():
-                    for folder in package_root.iterdir():
-                        if folder.is_dir() and folder not in candidates:
-                            candidates.append(folder)
-
-                source_pkg: Path | None = None
-                for cand in candidates:
-                    manifest = cand / "Manifest.json"
-                    install_log.push(f"[PROBE] Checking: {cand} -> Manifest: {manifest.exists()}")
-                    if manifest.exists():
-                        source_pkg = cand
-                        break
-
-                if not source_pkg:
-                    install_log.push("[ERROR] Could not locate any directory containing 'Manifest.json'!")
-                    ui.notify(t("notify_no_package"), type="negative")
-                    return
-
-                final_name = raw_pkg_name or source_pkg.name
-                target_dest = TTPG_PACKAGES_DIR / final_name
-
-                install_log.push(f"[RESOLVED] Source: {source_pkg}")
-                install_log.push(f"[RESOLVED] Destination: {target_dest}")
-
                 try:
+                    raw_pkg_dir = Path(pkg_dir_in.value.strip())
+                    raw_pkg_name = pkg_name_in.value.strip()
+
+                    install_log.push(f"[DEBUG] Input pkg_dir: {raw_pkg_dir}")
+                    install_log.push(f"[DEBUG] Input pkg_name: {raw_pkg_name}")
+                    install_log.push(f"[DEBUG] TTPG_PACKAGES_DIR: {TTPG_PACKAGES_DIR}")
+
+                    candidates: list[Path] = [
+                        BASE_DIR / raw_pkg_dir / raw_pkg_name,
+                        BASE_DIR / raw_pkg_dir,
+                        raw_pkg_dir if raw_pkg_dir.is_absolute() else (BASE_DIR / raw_pkg_dir),
+                    ]
+
+                    package_root = BASE_DIR / "_PACKAGE"
+                    if package_root.exists():
+                        for folder in package_root.iterdir():
+                            if folder.is_dir() and folder not in candidates:
+                                candidates.append(folder)
+
+                    source_pkg: Path | None = None
+                    for cand in candidates:
+                        manifest = cand / "Manifest.json"
+                        install_log.push(f"[PROBE] Checking: {cand} -> Manifest: {manifest.exists()}")
+                        if manifest.exists():
+                            source_pkg = cand
+                            break
+
+                    if not source_pkg:
+                        install_log.push("[ERROR] Could not locate any directory containing 'Manifest.json'!")
+                        ui.notify(t("notify_no_package"), type="negative")
+                        return
+
+                    final_name = raw_pkg_name or source_pkg.name
+                    target_dest = TTPG_PACKAGES_DIR / final_name
+
+                    install_log.push(f"[RESOLVED] Source: {source_pkg}")
+                    install_log.push(f"[RESOLVED] Destination: {target_dest}")
+
                     TTPG_PACKAGES_DIR.mkdir(parents=True, exist_ok=True)
                     install_log.push(f"[FS] Target base ensured: {TTPG_PACKAGES_DIR}")
 
-                    # Delete old assets to prevent duplicates in the game
+                    # Purge previous installations to avoid orphaned assets
                     if target_dest.exists():
                         install_log.push(f"[CLEAN] Purging existing target assets in: {target_dest.name}")
                         shutil.rmtree(target_dest)
@@ -324,9 +349,11 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                 except Exception as exc:
                     install_log.push(f"[EXCEPTION] {type(exc).__name__}: {exc}")
                     ui.notify(f"{t('notify_install_fail')} ({exc})", type="negative")
+                finally:
+                    btn_install_direct.enable()
 
             with ui.row().classes("gap-3 q-my-sm"):
-                ui.button(
+                btn_install_direct = ui.button(
                     t("btn_install_direct"),
                     icon="download_done",
                     on_click=run_install_with_diagnostics,
@@ -344,3 +371,6 @@ def create_pipeline_view(lang_selector_ref_getter: Callable[[], Optional[ui.sele
                     icon="gamepad",
                     on_click=lambda: open_system_folder(TTPG_PACKAGES_DIR),
                 ).props("flat")
+
+            with ui.stepper_navigation():
+                ui.button(t("btn_back"), on_click=stepper.previous).props("flat")
