@@ -49,6 +49,8 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 | `app/pdf_analyzer.py` | 1D differential cut analyzer, vector inspector & throttled SVG overlay generator. | Core module |
 | `app/views/calibrator.py` | Visual grid calibrator with 2-Click calibration and conflict-free keyboard shortcuts. | View component |
 | `app/views/wizard.py` | Asynchronous 4-step pipeline runner (Configuration → Extraction → Compilation → Install). | View component |
+| `app/views/diagnostics.py` | Built-in test runner, Ruff static linter, and i18n parity sync view. | View component |
+| `tests/` | Comprehensive test suite (unit, regression, PDF batch parsing, i18n parity, package install mock). | `pytest -v tests/` (or GUI) |
 | `locales/*.json` | Internationalization bundles (`en.json`, `pl.json`). | Runtime asset |
 | `deck_processor.py` | Vector extraction engine. Renders card pairs from PDF according to grid profiles and emits `deck_meta.json`. | `python deck_processor.py` |
 | `ttpg_packager.py` | Compiles card pairs into atlases and generates unified TTPG `<GUID>Card.json` templates with per-card hover tooltips (`CardNames`) and stack names (`Name`). | `python ttpg_packager.py` |
@@ -98,8 +100,8 @@ Open `[http://127.0.0.1:8080](http://127.0.0.1:8080)`. The interface includes tw
 
 1. **Configuration:** Set package metadata, export DPI, and verify working directories.
 2. **PDF Extraction:** Runs `deck_processor.py` asynchronously with real-time log streaming.
-3. **TTPG Compilation:** Runs `ttpg_packager.py` to compile atlases and generate manifests.
-4. **Installation:** Direct deployment into `%LOCALAPPDATA%\TabletopPlayground\Packages`.
+3. **TTPG Compilation:** Runs `ttpg_packager.py` to compile atlases and generate manifests. Includes **pre-flight package detection** to allow skipping re-compilation if valid assets exist.
+4. **Installation:** Direct deployment into `%LOCALAPPDATA%\TabletopPlayground\Packages` with live diagnostic logging and Manifest integrity verification.
 
 #### Tab 2: Visual Grid Calibrator (v1.1.0)
 
@@ -111,14 +113,19 @@ Open `[http://127.0.0.1:8080](http://127.0.0.1:8080)`. The interface includes tw
 
 * **Direct Keyboard Nudge (Conflict-Free):**
 * **Origin (X/Y):** `Arrow Keys` (hold `Shift` for fine 0.1 pt micro-steps)
-* **Card Dimensions (W/H):** `W` / `A` / `S` / `D`
-* **Gutters (X/Y):** `J` / `L` / `I` / `K`
+* **Card Dimensions (W/H):** `W` / `A` / `S` / `D` (hold `Shift` for fine 0.1 pt micro-steps)
+* **Gutters (X/Y):** `J` / `L` / `I` / `K` (hold `Shift` for fine 0.1 pt micro-steps)
 * **Columns & Rows:** `[` / `]` (cols), `;` / `'` (rows)
 
 
 * **Save Profile:** Writes calibrated presets straight to `config.json`.
 
+#### Tab 3: Diagnostics & Regression Tests (v1.2.0)
 
+* **Integrated Pytest Runner:** Run all tests or fast regression suites (`test_smoke`, `test_localization`, `test_pdf_analyzer`, `test_packager_install`) directly in the UI with live terminal output.
+* **TTPG Installer Mock Test:** Verify package staging and manifest emission in an isolated sandbox.
+* **Static Linter (Ruff):** Execute zero-configuration code analysis and fail-fast inspections from the browser.
+* **i18n Locale Auto-Sync:** Validate key symmetry between `en.json` and `pl.json` and auto-inject missing translation stubs.
 
 ---
 
