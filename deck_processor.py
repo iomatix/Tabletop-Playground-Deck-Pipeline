@@ -1,8 +1,9 @@
 """
-PDF Card Deck Extraction Engine.
+PDF Card Deck & Document Extraction Engine.
 
-Renders vector-based card pages from PDF documents into paired front/back PNG images
-according to declarative grid profiles and duplex binding rules.
+Renders vector-based card pages and documents from PDF files into paired
+front/back PNG images according to declarative grid profiles and duplex rules.
+Emits a contract file (deck_meta.json) for downstream packaging tools.
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ class DeckProfile:
 
 
 class PdfDeckExtractor:
-    """Extracts duplex card grids and single-sheet guidebooks from source PDFs."""
+    """Extracts duplex card grids and single-sheet documents strictly from allow-listed PDFs."""
 
     def __init__(self, base_dir: Path) -> None:
         self.base_dir = base_dir
@@ -50,7 +51,7 @@ class PdfDeckExtractor:
         self.dpi: int = self.cfg.get("dpi", 200)
 
         if self.dpi <= 0:
-            self._fail_fast(f"Invalid DPI: {self.dpi}. Must be > 0.")
+            self._fail_fast(f"Invalid DPI value: {self.dpi}. Must be > 0.")
 
         scale_factor = self.dpi / POINTS_PER_INCH
         self.matrix = pymupdf.Matrix(scale_factor, scale_factor)
@@ -105,24 +106,29 @@ class PdfDeckExtractor:
                 digest.update(chunk)
         return digest.hexdigest()
 
-    def resolve_profile(self, pdf_path: Path) -> Optional[DeckProfile]:
-        local_config_path = pdf_path.parent / "deck.json"
+    def resolve_profile_and_rule(self, pdf_path: Path) -> tuple[Optional[DeckProfile], Optional[str]]:
+        """Strictly matches PDF against declared rules in config.json or a local deck.json."""
         matched_rule_profile: Optional[str] = None
+        strip_suffix: Optional[str] = None
 
         for rule in self.cfg.get("rules", []):
             pattern = rule.get("pattern", "")
             if pdf_path.match(pattern) or Path(pdf_path.name).match(pattern):
                 matched_rule_profile = rule.get("profile")
+                strip_suffix = rule.get("strip_suffix")
                 break
 
+        local_config_path = pdf_path.parent / "deck.json"
+
+        # Strict Allow-List: Ignore files without an explicit rule or explicit local config
         if not matched_rule_profile and not local_config_path.exists():
-            return None
+            return None, None
 
         profile_name = matched_rule_profile or self.cfg.get("default_profile", "story_engine_standard")
         base_profile = self.cfg.get("profiles", {}).get(profile_name)
 
         if not base_profile:
-            return None
+            self._fail_fast(f"Profile '{profile_name}' is referenced in rules but not defined in profiles.")
 
         grid_raw = dict(base_profile["grid"])
         duplex_flip = base_profile.get("duplex_flip", "horizontal")
@@ -145,26 +151,23 @@ class PdfDeckExtractor:
             gutter_y_pt=float(grid_raw.get("gutter_y_pt", 0.0)),
         )
 
-        return DeckProfile(name=profile_name, grid=grid, duplex_flip=duplex_flip)
+        return DeckProfile(name=profile_name, grid=grid, duplex_flip=duplex_flip), strip_suffix
 
-    def _determine_output_directory(self, pdf_path: Path) -> Path:
+    def _determine_output_directory(self, pdf_path: Path, strip_suffix: Optional[str]) -> Path:
         target_relative_dir = pdf_path.parent.relative_to(self.input_root)
         clean_stem = pdf_path.stem
 
-        for rule in self.cfg.get("rules", []):
-            suffix = rule.get("strip_suffix")
-            if suffix and clean_stem.endswith(suffix):
-                clean_stem = clean_stem[:-len(suffix)].rstrip(" _-")
-                break
+        if strip_suffix and clean_stem.endswith(strip_suffix):
+            clean_stem = clean_stem[:-len(strip_suffix)].rstrip(" _-")
 
         output_dir = self.output_root / target_relative_dir / clean_stem
         output_dir.mkdir(parents=True, exist_ok=True)
         return output_dir
 
     def process_pdf(self, pdf_path: Path) -> None:
-        profile = self.resolve_profile(pdf_path)
+        profile, strip_suffix = self.resolve_profile_and_rule(pdf_path)
         if not profile:
-            print(f"[SKIP] No matching rule or profile found for: {pdf_path.name}")
+            print(f"[IGNORE] Skipping unlisted file: {pdf_path.name}")
             return
 
         cache_key = str(pdf_path.relative_to(self.input_root))
@@ -179,22 +182,26 @@ class PdfDeckExtractor:
             sort_keys=True,
         )
 
-        deck_output_dir = self._determine_output_directory(pdf_path)
+        deck_output_dir = self._determine_output_directory(pdf_path, strip_suffix)
 
-        if self.cache.get(cache_key) == cache_state and any(deck_output_dir.glob("card_*_front.png")):
+        if (
+            self.cache.get(cache_key) == cache_state
+            and any(deck_output_dir.glob("card_*_front.png"))
+            and (deck_output_dir / "deck_meta.json").exists()
+        ):
             print(f"[SKIP] {pdf_path.name} (cached)")
             return
 
         doc = pymupdf.open(pdf_path)
         total_pages = len(doc)
 
-        # Handle standalone single-page documents
+        # Standalone single-page self-healing
         if total_pages == 1:
             full_page_cfg = self.cfg.get("profiles", {}).get("full_page_duplex")
             if full_page_cfg:
                 grid_raw = full_page_cfg["grid"]
                 profile = DeckProfile(
-                    name="full_page_duplex (auto-detected)",
+                    name="full_page_duplex",
                     grid=GridConfig(
                         cols=1,
                         rows=1,
@@ -208,22 +215,17 @@ class PdfDeckExtractor:
                     duplex_flip="none",
                 )
 
-        is_guidebook = (
-            total_pages == 1
-            or "guidebook" in pdf_path.name.lower()
-            or "instruction" in pdf_path.name.lower()
-            or profile.name.startswith("full_page")
-            or (profile.grid.cols == 1 and profile.grid.rows == 1)
-        )
+        is_document = (profile.grid.cols == 1 and profile.grid.rows == 1)
 
-        if not is_guidebook and total_pages % 2 != 0:
+        # Enforce duplex parity on multi-card decks
+        if not is_document and total_pages % 2 != 0:
             doc.close()
             self._fail_fast(
-                f"Odd page count ({total_pages}) detected in double-sided card deck: {pdf_path.name}. "
-                "Verify duplex configuration or declare guidebook rule."
+                f"Odd page count ({total_pages}) detected in double-sided deck: {pdf_path.name}. "
+                "Verify duplex binding or assign a single-page document profile."
             )
 
-        print(f"\n[PROCESS] Extracting: {pdf_path.name} -> Profile: {profile.name}")
+        print(f"\n[PROCESS] Extracting: {pdf_path.name} -> Profile: {profile.name} (Type: {'Document' if is_document else 'Card Deck'})")
 
         grid = profile.grid
         card_counter = 1
@@ -238,7 +240,7 @@ class PdfDeckExtractor:
 
             for row in range(grid.rows):
                 for col in range(grid.cols):
-                    if is_guidebook or (grid.cols == 1 and grid.rows == 1):
+                    if is_document:
                         front_rect = front_page.rect
                         back_rect = back_page.rect if back_page else front_page.rect
                     else:
@@ -271,16 +273,40 @@ class PdfDeckExtractor:
                         target_h = front_rect.height
                         blank_pix = pymupdf.Pixmap(
                             pymupdf.csRGB,
-                            pymupdf.IRect(0, 0, int(target_w * (self.dpi / POINTS_PER_INCH)), int(target_h * (self.dpi / POINTS_PER_INCH))),
+                            pymupdf.IRect(
+                                0,
+                                0,
+                                int(target_w * (self.dpi / POINTS_PER_INCH)),
+                                int(target_h * (self.dpi / POINTS_PER_INCH)),
+                            ),
                         )
                         blank_pix.clear_with(255)
                         blank_pix.save(deck_output_dir / f"card_{card_counter:03d}_back.png")
 
                     card_counter += 1
 
+        total_extracted = card_counter - 1
         doc.close()
+
+        # Emit contract metadata file for ttpg_packager.py
+        meta_contract = {
+            "source_pdf": pdf_path.name,
+            "item_type": "document" if is_document else "card_deck",
+            "profile": profile.name,
+            "total_items": total_extracted,
+            "duplex_flip": profile.duplex_flip,
+            "grid": {
+                "cols": grid.cols,
+                "rows": grid.rows,
+                "card_width_pt": grid.card_width_pt,
+                "card_height_pt": grid.card_height_pt,
+            },
+        }
+        with open(deck_output_dir / "deck_meta.json", "w", encoding="utf-8") as meta_file:
+            json.dump(meta_contract, meta_file, indent=2)
+
         self.cache[cache_key] = cache_state
-        print(f"  [+] Saved {card_counter - 1} cards into: {deck_output_dir}")
+        print(f"  [+] Saved {total_extracted} items and deck_meta.json into: {deck_output_dir}")
 
     def run(self) -> None:
         pdf_files = sorted(list(self.input_root.rglob("*.pdf")))
@@ -288,7 +314,7 @@ class PdfDeckExtractor:
             print(f"[INFO] No PDF files found in: {self.input_root}")
             return
 
-        print(f"[*] Starting extraction from {self.input_root}. Discovered {len(pdf_files)} PDF file(s).")
+        print(f"[*] Starting extraction from {self.input_root}. Discovered {len(pdf_files)} PDF candidate(s).")
         self.output_root.mkdir(parents=True, exist_ok=True)
 
         for pdf in pdf_files:

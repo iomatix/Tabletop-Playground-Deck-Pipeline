@@ -3,11 +3,11 @@
 Automated extraction, texture atlas compilation, and packaging pipeline for custom card decks and guidebooks in **Tabletop Playground** (Unreal Engine).
 
 ```
-   [ Source PDFs ]               _INPUT/
+   [ Source PDFs ]               _INPUT/<Package>/<Deck>.pdf
           │
           ▼  (deck_processor.py / PyMuPDF)
-   [ Card Pairs ]                _OUTPUT/<Universe>/<Deck>/card_###_[front|back].png
-          │
+   [ Card Pairs & Metadata ]     _OUTPUT/<Package>/<Deck>/card_###_[front|back].png
+          │                      _OUTPUT/<Package>/<Deck>/deck_meta.json (Contract)
           ▼  (ttpg_packager.py / Pillow)
    [ Texture Atlases ]           _PACKAGE/<Name>/Textures/*.png  (Max 8192x8192 px)
    [ Unified JSON Templates ]    _PACKAGE/<Name>/Templates/*Card.json (Multi-sheet)
@@ -17,22 +17,26 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 
 ```
 
+> [!NOTE]
+> In the extraction path `card_###_[front|back].png`, `###` denotes the **1-based sequential card index** within that specific deck folder (e.g., `card_001_front.png` to `card_120_front.png`), not a physical page number.
+> 
+>
+
 ---
 
-## Key Features
-
-* **Deterministic Physics (SoC):** Card dimensions (`Width`, `Height`) are calculated directly from pixel dimensions and configured DPI using $size_{cm} = \frac{pixels}{dpi} \times 2.54$. No hardcoded magic dimensions.
-* **Native Multi-Sheet Decks:** Tallies exceeding texture boundaries (100 cards or 8192 px) are compiled into a single unified TTPG Card template using `ExtraFrontTextures` and `ExtraBackTextures`, preventing fragmented deck spawns in-game.
-* **Vector-Accurate Extraction:** Direct PDF clipping via PyMuPDF matrix scaling without intermediate full-page rasterization.
-
-
-* **Hierarchical Overrides:** Local `deck.json` files override global `config.json` rules seamlessly at any directory depth.
-* **Fail-Fast Engineering:** Strict assertions enforce dimension consistency, duplex pairing, and page-count integrity before allocating textures.
-
-
-* **Visual Calibrator UI:** Built-in NiceGUI dashboard with SVG alignment overlays, auto-detection of crop marks, and one-click package installation.
-
-
+> [!IMPORTANT]
+> **Key Architecture Highlights**
+> * **Deterministic Physics (SoC):** Card dimensions (`Width`, `Height`) are calculated dynamically from pixel boundaries and DPI:
+>   ```
+>   size_cm = (pixels / dpi) * 2.54
+>   ```
+>   No hardcoded magic numbers.
+> * **Native Multi-Sheet Decks:** Decks exceeding TTPG grid capacity (100 cards / 10×10 max cells) or GPU texture boundaries (8192 px) compile into a single unified Card template using `ExtraFrontTextures` and `ExtraBackTextures`, preventing split stacks in-game.
+> * **Contract-Driven Pipeline (`deck_meta.json`):** Downstream tools receive exact classification (`card_deck` vs. `document`) directly from the extraction phase, eliminating brittle string heuristics.
+> * **Context-Aware Naming & Tooltips:** In-game objects are prefixed with package hierarchy (`[Bridge Expansion Set] Lore Master's Deck Guidebook`), and cards held in hand display distinct hover labels (`Deck #001`, `Guidebook - Page 1`).
+> * **Strict Allow-List:** Only PDFs explicitly matching rules in `config.json` are processed; print/assembly guides and alternate eco cuts are ignored by default.
+> 
+> 
 
 ---
 
@@ -41,11 +45,13 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 | File | Role | Execution |
 | --- | --- | --- |
 | `gui_app.py` | Complete desktop dashboard with 4-step wizard and live visual calibration. | `python gui_app.py` (or `run_app.bat`) |
-| `deck_processor.py` | Vector extraction engine. Renders card pairs from PDF according to grid profiles. | `python deck_processor.py` |
-| `ttpg_packager.py` | Compiles card pairs into atlases and generates unified TTPG <GUID>Card.json templates. | `python ttpg_packager.py` |
-| `inspect_deck.py` | Fast diagnostic CLI. Crops a single card pair to verify cut math and duplex alignment. | `python inspect_deck.py [optional_pdf]` |
-| `config.json` | Declarative project schema: paths, DPI, match rules, and preset grid definitions. | Loaded at runtime |
+| `deck_processor.py` | Vector extraction engine. Renders card pairs from PDF according to grid profiles and emits `deck_meta.json`. | `python deck_processor.py` |
+| `ttpg_packager.py` | Compiles card pairs into atlases and generates unified TTPG `<GUID>Card.json` templates with per-card hover tooltips (`CardNames`) and stack names (`Name`). | `python ttpg_packager.py` |
+| `inspect_deck.py` | Fast diagnostic CLI. Crops a single card pair to verify cut math, margins, and duplex alignment. | `python inspect_deck.py [optional_pdf]` |
+| `config.json` | Declarative project schema: paths, DPI, allow-list match rules, and preset grid definitions. | Loaded at runtime |
+| `deck_meta.json` | *(Generated)* Intermediate contract stored in each `_OUTPUT` subfolder detailing item classification (`card_deck` or `document`), grid dimensions, and item counts. | Emitted by processor |
 | `deck.json` | *(Optional)* Local folder override for custom physics, metadata, or grid offsets. | Merged hierarchically |
+
 
 ---
 
@@ -53,7 +59,7 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 
 ### 1. Requirements & Installation
 
-Python 3.10+ is required. Install required dependencies:
+Python 3.10+ is required. Install dependencies:
 
 ```bash
 pip install pymupdf pillow nicegui
@@ -81,7 +87,7 @@ python gui_app.py
 
 ```
 
-Open `http://localhost:8080` in your browser. The interface guides you through:
+Open `[http://127.0.0.1:8080](http://127.0.0.1:8080)` (default port; NiceGUI will bind to the next available port if 8080 is occupied). The interface guides you through:
 
 1. **Configuration:** Set package name and export DPI.
 
@@ -149,32 +155,46 @@ The global configuration governs default paths, raster DPI, filename matching ru
 
 ```
 
+### Rules & Suffix Stripping
+
+* **`strip_suffix`**: Trailing text removed from the PDF stem when naming the output folder.
+
+
+* `"_HQ Cards"`: Converts `Deck_HQ Cards.pdf` into folder name `Deck`.
+
+
+* `""` (empty string): **No suffix removal**; the output directory retains the clean PDF stem.
+
+
+
+
+
 ### Profiles Breakdown
 
-* **`model`**: `"Rounded"` (standard playing card) or `"Square"` (tiles, manuals, square boards).
-* **`thickness_cm`**: Card thickness in centimeters (default: `0.05` for cards, `0.03` for guidebooks).
-* **`duplex_flip`**:
-* `"horizontal"`: Back side columns are mirrored (`cols - 1 - col`) for standard short-edge landscape duplex or long-edge portrait duplex.
+* **`model`**: `"Rounded"` (playing cards) or `"Square"` (tiles, manuals, full-page sheets).
+* **`thickness_cm`**: Physical card thickness in centimeters (default: `0.05` for cards, `0.03` for guidebooks).
+* **`duplex_flip`**: Duplex binding transform, dependent on PDF page orientation (Portrait vs. Landscape):
+* `"horizontal"`: Back side columns are mirrored (`cols - 1 - col`). Standard for portrait pages flipped along the long edge, or landscape pages flipped along the short edge.
 
 
-* `"vertical"`: Back side rows are mirrored (`rows - 1 - row`).
+* `"vertical"`: Back side rows are mirrored (`rows - 1 - row`). Standard for "calendar-style" flips along the opposing edge.
 
 
-* `"none"`: Front and back use the exact same coordinates (for single-sided cards or manuals).
+* `"none"`: Front and back use the exact same grid coordinates (for single-sided cards or uniform multi-page manuals).
 
 
 
 
-* **`grid`**: PDF coordinate geometry measured in PostScript points ($1\text{ pt} = \frac{1}{72}\text{ inch}$):
+* **`grid`**: PDF coordinate geometry measured in standard PostScript points ($1\text{ pt} = \frac{1}{72}\text{ inch}$):
 
 
-* `cols` / `rows`: Grid count per sheet.
+* `cols` / `rows`: Grid cells per page.
 
 
-* `card_width_pt` / `card_height_pt`: Card cut dimensions.
+* `card_width_pt` / `card_height_pt`: Card cut boundaries.
 
 
-* `origin_x_pt` / `origin_y_pt`: Margin offsets from the bottom/top-left origin.
+* `origin_x_pt` / `origin_y_pt`: Margin offsets from the origin.
 
 
 * `gutter_x_pt` / `gutter_y_pt`: Spacing between adjacent cards.
@@ -183,11 +203,16 @@ The global configuration governs default paths, raster DPI, filename matching ru
 
 
 
+> [!WARNING]
+> PostScript points are fixed at $72\text{ pt/inch}$ within PDF specifications. The actual raster resolution in pixels is governed by the top-level `"dpi"` setting. Ensure grid measurements match the authoring vector coordinates, not raster-downsampled values.
+> 
+> 
+
 ---
 
 ## Local Overrides (`deck.json`)
 
-To override properties for an individual deck without modifying global rules, create a `deck.json` file inside the PDF's directory in `_INPUT`:
+To override properties for an individual deck without modifying global rules, place a `deck.json` file inside the PDF's directory in `_INPUT`:
 
 ```text
 _INPUT/
@@ -222,47 +247,86 @@ _INPUT/
 
 ```
 
-*Any field omitted from `deck.json` automatically inherits from the resolved profile and image calculations.*
+> [!TIP]
+> Any omitted dimension property falls back to the active profile or pixel-to-DPI calculation. You can also explicitly pass the literal string `"card_width_cm": "auto"` to mandate automatic calculation.
 
 ---
 
 ## Advanced Mechanics
 
-### Multi-Sheet Unified Templates
+### Strict Allow-List Processing
 
-When a deck contains more cards than fit onto a single $8192 \times 8192\text{ px}$ sheet (or exceeds the $10 \times 10$ cell limit), `ttpg_packager.py`:
+`deck_processor.py` processes only files that match an entry in `rules` or have an adjacent `deck.json`. Unmatched files (e.g., `_Eco Cards.pdf`, print/assembly guides) are reported as `[IGNORE]` in the **CLI console log** and skipped, preventing asset collisions.
 
-1. Enforces uniform grid dimensions across all sheets (`cols` $\times$ `rows`).
+### Contract Architecture (`deck_meta.json`)
+
+During extraction, `deck_processor.py` writes a structured contract into each deck's output folder:
+
+```json
+{
+  "source_pdf": "Deck of Worlds Guidebook.pdf",
+  "item_type": "document",
+  "profile": "full_page_duplex",
+  "total_items": 4
+}
+
+```
+
+Supported values for `item_type`:
+
+* `"card_deck"`: Standard multi-card grid. Applies rounded card physics and `#001` sequential naming.
+
+
+* `"document"`: Single-sheet or booklet format ($1 \times 1$ grid). Applies square edges, thinner collision, and `Page X` naming.
+
+
+
+### Context-Aware Naming & In-Game Tooltips
+
+* **Stack Names (`Name`):** Prefixed with the package directory using bracket notation (`[Bridge Expansion Set] Lore Master's Deck Guidebook`). Square brackets are a **pipeline convention** to group and identify expansion components cleanly within the TTPG Object Spawner.
+* **Individual Card Tooltips (`CardNames`):** When a card is drawn into a player's hand or inspected, its hover tooltip displays the deck title and original index: `Story-Lore Bridge Expansion #003`.
+* **Document Pages:** Multi-page manuals and rulesheets display `[Title] - Page 1`, `[Title] - Page 2`, etc.
+
+### Multi-Sheet Unified Templates & `BackIndex: -3`
+
+When a deck exceeds single-sheet texture limits ($8192\text{ px}$ or 100 cards), `ttpg_packager.py`:
+
+1. Enforces uniform grid dimensions across all sheets (cols × rows).
 2. Generates numbered atlas pairs: `<Deck>_01_front.png`, `<Deck>_01_back.png`, `<Deck>_02_front.png`...
 3. Writes a **single** `<GUID>Card.json` linking `ExtraFrontTextures` and `ExtraBackTextures`.
-4. Sets `BackIndex: -3` for 1:1 unique card back pairing across the entire index range ($0$ to $N - 1$).
-
-### Fail-Fast Validations
-
-The pipeline aborts immediately (`sys.exit(1)`) under the following error states:
-
-* Odd page count in duplex card documents (indicates a missing back page or mismatched duplex pairing).
+4. Sets `"BackIndex": -3`:
+* In TTPG, `BackIndex: -1` mirrors the front face on the reverse side.
+* `BackIndex: -3` is the native engine flag for **Unique Backs (1:1 slot mapping)**. It instructs TTPG to map slot index $i$ on the front atlas to the exact corresponding slot $i$ on the back atlas across all primary and extra sheets.
 
 
-* Extracted card pixel dimensions mismatching within the same deck.
-* Card pixel dimensions exceeding GPU limits ($> 8192\text{ px}$).
-* Missing front/back companion pairs during packaging.
+
+### Sub-Pixel Jitter & Dimension Normalization
+
+Vector-to-raster clipping in PyMuPDF with fractional PostScript offsets ($80.95\text{ pt} \times \frac{250\text{ DPI}}{72} = 281.076\text{ px}$) inevitably introduces floating-point discretization jitter ($\pm 1\text{ to } 2\text{ px}$ across rows/columns).
+
+1. **Statistical Canonical Dimension:** `ttpg_packager.py` evaluates all cards in a deck using statistical mode (`Counter.most_common(1)`) to establish canonical width and height.
+2. **Strict Tolerance Boundary:** Deviations $\le 2\text{ px}$ (`MAX_JITTER_TOLERANCE_PX`) are automatically normalized to the canonical dimension using high-quality `LANCZOS` resampling during atlas baking.
+3. **Fail-Fast Boundary:** Deviations exceeding $2\text{ px}$ immediately trigger `[FAIL-FAST]`, halting execution to protect against genuine aspect-ratio corruption or misaligned grid definitions.
+
+> [!WARNING]
+> **Fail-Fast Trigger Conditions**
+> The pipeline aborts execution (`sys.exit(1)`) when:
+> * An odd page count is detected in double-sided card decks (`item_type: "card_deck"`). Single-page and full-page documents (`item_type: "document"`, $1 \times 1$ grid) are **exempt** from this check.
+> 
+> 
+> * Individual card pixel sizes deviate beyond the $\pm 2\text{ px}$ jitter threshold.
+> * Card dimensions exceed hardware texture limits ($> 8192\text{ px}$).
+> * Duplex card backs are missing corresponding front cards.
+> 
+> 
 
 ### Fast Calibration via CLI
 
-To quickly preview margins and duplex alignment for a specific PDF before running batch extraction:
+To preview margins and duplex alignment for a specific PDF before running batch extraction:
 
 ```bash
 python inspect_deck.py "_INPUT/Core/Story_HQ Cards.pdf"
 
 ```
 
-The script renders a single front/back pair into `_DIAGNOSTICS/precise_card_000_[front|back].png` and reports calculated physical dimensions in centimeters.
-
-### Sub-Pixel Jitter & Dimension Normalization
-Vector rendering from PDF documents at custom DPI values (e.g., 250 DPI with fractional PostScript point offsets) inherently introduces floating-point rasterization jitter ($\pm 1\text{ to } 2\text{ px}$ across different grid rows/columns).
-
-To handle this robustly:
-1. **Statistical Canonical Dimension:** `ttpg_packager.py` evaluates all cards in a deck using statistical mode (`Counter.most_common(1)`) to establish the canonical width and height.
-2. **Strict Tolerance Boundary:** Any card deviating by $\le 2\text{ px}$ (`MAX_JITTER_TOLERANCE_PX`) is automatically normalized to the canonical dimension using high-quality `LANCZOS` resampling during atlas baking.
-3. **Fail-Fast Boundary:** Any deviation exceeding $2\text{ px}$ immediately triggers `[FAIL-FAST]`, halting execution to protect against genuine aspect-ratio corruption, mismatched duplex definitions, or malformed assets.
+The script crops a single front/back pair into `_DIAGNOSTICS/precise_card_000_[front|back].png` and reports **raw vector-rasterized dimensions** in centimeters (before any packaging normalization) to verify crop accuracy.
