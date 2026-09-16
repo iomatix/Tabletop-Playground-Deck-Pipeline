@@ -8,7 +8,6 @@ without requiring external PDF test assets.
 import json
 import sys
 from pathlib import Path
-import pytest
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
@@ -38,13 +37,14 @@ def test_physics_formula():
 
 def test_module_syntax_imports():
     """Ensure core and modular pipeline modules import cleanly without errors."""
-    import deck_processor
-    import ttpg_packager
-    import inspect_deck
-    import app.state
     import app.pdf_analyzer
+    import app.state
     import app.views.calibrator
+    import app.views.diagnostics
     import app.views.wizard
+    import deck_processor
+    import inspect_deck
+    import ttpg_packager
 
     assert hasattr(deck_processor, "PdfDeckExtractor")
     assert hasattr(ttpg_packager, "PackageOrchestrator")
@@ -53,3 +53,4 @@ def test_module_syntax_imports():
     assert hasattr(app.pdf_analyzer, "PdfGridAnalyzer")
     assert hasattr(app.views.calibrator, "create_calibrator_view")
     assert hasattr(app.views.wizard, "create_pipeline_view")
+    assert hasattr(app.views.diagnostics, "create_diagnostics_view")

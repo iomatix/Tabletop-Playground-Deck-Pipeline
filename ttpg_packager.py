@@ -8,7 +8,6 @@ hierarchical context-aware naming, and unified TTPG Card template generation.
 
 from __future__ import annotations
 
-import fnmatch
 import json
 import re
 import sys
@@ -16,7 +15,7 @@ import uuid
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Final, Optional
+from typing import Any, Final
 
 from PIL import Image
 
@@ -134,7 +133,7 @@ class ContextResolver:
 
     def resolve_deck_context(self, deck_dir: Path) -> tuple[DeckMetadata, dict[str, Any]]:
         rel_parts = deck_dir.relative_to(self.output_dir).parts
-        
+
         # Determine package context from folder hierarchy
         package_context = rel_parts[0] if len(rel_parts) > 1 else ""
         raw_deck_name = rel_parts[-1]

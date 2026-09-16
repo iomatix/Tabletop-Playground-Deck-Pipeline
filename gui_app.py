@@ -1,8 +1,5 @@
 """
 NiceGUI Desktop Management Interface for the TTPG Deck Pipeline.
-
-Entry-point launcher initializing application layout, views,
-and running the local server instance.
 """
 
 from __future__ import annotations
@@ -12,7 +9,7 @@ import sys
 from typing import Any, Final, Optional
 
 # Pre-flight runtime dependency check
-REQUIRED_MODULES: Final[list[str]] = ["pymupdf", "PIL", "nicegui"]
+REQUIRED_MODULES: Final[list[str]] = ["pymupdf", "PIL", "nicegui", "pytest", "ruff"]
 missing = []
 for mod in REQUIRED_MODULES:
     try:
@@ -38,6 +35,7 @@ from app.state import (
     t,
 )
 from app.views.calibrator import create_calibrator_view
+from app.views.diagnostics import create_diagnostics_view
 from app.views.wizard import create_pipeline_view
 
 
@@ -74,7 +72,6 @@ app.on_startup(patch_windows_proactor_loop)
 
 @ui.page("/")
 def index_page() -> None:
-    # Styl i kolory przeniesione do wnetrza strony (brak kolizji z global scope)
     ui.colors(primary="#1976d2", secondary="#26a69a", accent="#9c27b0", dark="#121212")
 
     lang_selector_ref: dict[str, Optional[ui.select]] = {"widget": None}
@@ -115,6 +112,7 @@ def index_page() -> None:
         with ui.tabs().classes("w-full") as tabs:
             tab_pipeline = ui.tab(t("tab_pipeline"))
             tab_calibrator = ui.tab(t("tab_calibrator"))
+            tab_diagnostics = ui.tab(t("tab_diagnostics"))
 
         with ui.tab_panels(tabs, value=tab_pipeline).classes("w-full max-w-6xl mx-auto q-pa-md"):
             with ui.tab_panel(tab_pipeline):
@@ -122,6 +120,9 @@ def index_page() -> None:
 
             with ui.tab_panel(tab_calibrator):
                 create_calibrator_view()
+
+            with ui.tab_panel(tab_diagnostics):
+                create_diagnostics_view(lambda: lang_selector_ref["widget"])
 
     render_dashboard()
 

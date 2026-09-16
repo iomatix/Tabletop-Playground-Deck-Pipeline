@@ -1,0 +1,30 @@
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+# Exclude output folders, environments, and caches
+exclude = [
+    ".git",
+    "__pycache__",
+    "_INPUT",
+    "_OUTPUT",
+    "_PACKAGE",
+    "_DIAGNOSTICS",
+    ".pytest_cache",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",   # Pycodestyle errors
+    "F",   # Pyflakes violations (undefined names, missing imports)
+    "W",   # Pycodestyle warnings
+    "I",   # Import sorting (isort)
+]
+
+ignore = [
+    "E501", # Ignore strict line-length rule for long SVG strings
+]
+
+[tool.ruff.lint.per-file-ignores]
+# gui_app.py pre-flights before importing NiceGUI
+"gui_app.py" = ["E402"]

@@ -3,7 +3,9 @@ Batch integration tests for local PDF input assets.
 """
 
 from pathlib import Path
+
 import pytest
+
 from app.pdf_analyzer import PdfGridAnalyzer
 
 BASE_DIR = Path(__file__).resolve().parent.parent

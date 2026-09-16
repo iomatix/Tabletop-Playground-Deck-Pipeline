@@ -3,7 +3,8 @@ Unit tests for 1D differential analyzer and PDF inspection safety.
 """
 
 from pathlib import Path
-from app.pdf_analyzer import _cluster_1d, _decompose_axis, PdfGridAnalyzer
+
+from app.pdf_analyzer import PdfGridAnalyzer, _cluster_1d, _decompose_axis
 
 
 def test_cluster_1d_with_jitter():

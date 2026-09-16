@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import platform
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
@@ -89,7 +89,7 @@ def t(key: str) -> str:
 def open_system_folder(path: Path) -> None:
     if not path.exists():
         path.mkdir(parents=True, exist_ok=True)
-    
+
     current_os = platform.system()
     try:
         if current_os == "Windows":
