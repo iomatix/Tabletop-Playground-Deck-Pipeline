@@ -128,10 +128,10 @@ The interface provides three dedicated modules:
 
 
 * **Direct Keyboard Nudge (Conflict-Free):**
-* **Origin (X/Y):** `Arrow Keys` (hold `Shift` for fine 0.1 pt micro-steps)
-* **Card Dimensions (W/H):** `W` / `A` / `S` / `D` (hold `Shift` for fine 0.1 pt micro-steps)
-* **Gutters (X/Y):** `J` / `L` / `I` / `K` (hold `Shift` for fine 0.1 pt micro-steps)
-* **Columns & Rows:** `[` / `]` (cols), `;` / `'` (rows)
+   * **Origin (X/Y):** `Arrow Keys` (hold `Shift` for fine 0.1 pt micro-steps)
+   * **Card Dimensions (W/H):** `W` / `A` / `S` / `D` (hold `Shift` for fine 0.1 pt micro-steps)
+   * **Gutters (X/Y):** `J` / `L` / `I` / `K` (hold `Shift` for fine 0.1 pt micro-steps)
+   * **Columns & Rows:** `[` / `]` (cols), `;` / `'` (rows)
 
 
 * **Save Profile:** Writes calibrated presets straight to `config.json`.
