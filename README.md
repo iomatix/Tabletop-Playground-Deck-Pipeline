@@ -108,7 +108,9 @@ python gui_app.py
 
 ```
 
-Access the UI at `[http://127.0.0.1:8080](http://127.0.0.1:8080)`. The interface provides three dedicated modules:
+Access the UI at [http://127.0.0.1:8080](http://127.0.0.1:8080).
+
+The interface provides three dedicated modules:
 
 #### Tab 1: Pipeline & Build (4-Step Wizard)
 
