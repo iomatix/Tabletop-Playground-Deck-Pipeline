@@ -69,9 +69,8 @@ if missing:
 from nicegui import ui
 
 from app.state import (
-    SUPPORTED_LOCALES,
-    change_language,
-    current_lang,
+    locale_mgr,
+    state,
     t,
 )
 from app.views.calibrator import create_calibrator_view
@@ -101,12 +100,18 @@ def main_page() -> None:
             ui.icon("layers", size="md")
             ui.label(t("app_title")).classes("text-h6 font-bold tracking-wider")
 
+        available_locales = sorted(list(locale_mgr.locales.keys())) if locale_mgr.locales else ["en", "pl"]
+
+        def on_lang_change(e):
+            state.current_lang = e.value
+            ui.navigate.to("/")
+
         with ui.row().classes("items-center gap-4"):
             lang_selector = (
                 ui.select(
-                    options=SUPPORTED_LOCALES,
-                    value=current_lang,
-                    on_change=lambda e: change_language(e.value),
+                    options=available_locales,
+                    value=state.current_lang,
+                    on_change=on_lang_change,
                 )
                 .props("dense outlined dark bg-color=primary-dark options-dense")
                 .classes("w-28 text-caption")
@@ -130,6 +135,8 @@ def main_page() -> None:
 
 if __name__ in {"__main__", "__mp_main__"}:
     ui.run(
+        host="127.0.0.1",
+        port=8080,
         title="TTPG Deck Pipeline Manager",
         favicon="🃏",
         reload=False,
