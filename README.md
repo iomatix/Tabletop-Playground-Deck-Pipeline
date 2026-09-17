@@ -71,7 +71,7 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 * Requires **Python 3.10+ (Standard Win32 / macOS / Linux)**.
 
 > [!WARNING]
-> **Windows Users:** Do NOT use the Microsoft Store version of Python (`PythonSoftwareFoundation`). Its UWP sandbox activates filesystem virtualization, redirecting writes away from `%LOCALAPPDATA%\TabletopPlayground`. Always use the official installer from [python.org](https://www.google.com/search?q=https://www.python.org/) or install via `winget install Python.Python.3.13`.
+> **Windows Users:** Do NOT use the Microsoft Store version of Python (`PythonSoftwareFoundation`). Its UWP sandbox activates filesystem virtualization, redirecting writes away from `%LOCALAPPDATA%\TabletopPlayground`. Always use the official installer from [python.org](https://www.python.org/downloads/) or install via `winget install Python.Python.3.13`.
 
 ---
 
