@@ -62,9 +62,14 @@ jobs:
           pyinstaller --noconfirm --onedir --console `
             --name "TTPG-Deck-Pipeline" `
             --add-data "locales;locales" `
-            --add-data "config.json;." `
+            --hidden-import deck_processor `
+            --hidden-import ttpg_packager `
             --collect-all nicegui `
-            gui_app.py
+            gui_app.py   
+          Copy-Item "config.json" -Destination "dist/TTPG-Deck-Pipeline/config.json"
+          New-Item -ItemType Directory -Force -Path "dist/TTPG-Deck-Pipeline/_INPUT"
+          New-Item -ItemType Directory -Force -Path "dist/TTPG-Deck-Pipeline/_OUTPUT"
+          New-Item -ItemType Directory -Force -Path "dist/TTPG-Deck-Pipeline/_PACKAGE"
 
       - name: Compress Build Artifacts
         run: |
