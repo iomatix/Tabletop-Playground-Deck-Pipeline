@@ -24,6 +24,7 @@ Automated extraction, texture atlas compilation, and packaging pipeline for cust
 
 > [!IMPORTANT]
 > **Key Architecture Highlights**
+>
 > * **Deterministic Physics (SoC):** Card dimensions (`Width`, `Height`) are calculated dynamically from pixel boundaries and DPI: $size_{cm} = \frac{pixels}{dpi} \times 2.54$. No hardcoded magic numbers.
 > * **UV-Safe Partitioned Stacks:** Decks exceeding TTPG grid capacity (100 cards / $10 \times 10$ max cells) or GPU texture boundaries (8192 px) are automatically partitioned into numbered sub-stacks (Part 1, Part 2) with clean UV coordinates, ready to be stacked together in-game.
 > * **Contract-Driven Pipeline (`deck_meta.json`):** Downstream tools receive exact classification (`card_deck` vs. `document`) directly from the extraction phase, eliminating brittle string heuristics.
@@ -320,8 +321,10 @@ Vector-to-raster clipping in PyMuPDF with fractional PostScript offsets ($80.95\
 3. **Fail-Fast Boundary:** Deviations exceeding $2\text{ px}$ immediately trigger `[FAIL-FAST]`, halting execution to protect against genuine aspect-ratio corruption or misaligned grid definitions.
 
 > [!WARNING]
-> **Fail-Fast Trigger Conditions**
+> **Fail-Fast Trigger Conditions
+>
 > The pipeline aborts execution (`sys.exit(1)`) when:
+>
 > * An odd page count is detected in double-sided card decks (`item_type: "card_deck"`). Single-page and full-page documents (`item_type: "document"`, $1 \times 1$ grid) are **exempt** from this check.
 > * Individual card pixel sizes deviate beyond the $\pm 2\text{ px}$ jitter threshold.
 > * Card dimensions exceed hardware texture limits ($> 8192\text{ px}$).
