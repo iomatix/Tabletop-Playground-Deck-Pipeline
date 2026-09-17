@@ -118,7 +118,7 @@ def main_page() -> None:
             )
 
     with ui.tabs().classes("w-full bg-grey-2 text-primary shadow-1") as tabs:
-        tab_wizard = ui.tab(t("tab_wizard"), icon="auto_fix_high")
+        tab_wizard = ui.tab(t("tab_pipeline"), icon="auto_fix_high")
         tab_calibrator = ui.tab(t("tab_calibrator"), icon="tune")
         tab_diagnostics = ui.tab(t("tab_diagnostics"), icon="troubleshoot")
 
