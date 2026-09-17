@@ -123,8 +123,8 @@ The interface provides three dedicated modules:
 
 * **Auto-Detect Grid:** Runs 1D differential clustering directly on PDF vector cut lines.
 * **2-Click Calibration:**
-* **Single Card #1:** Click Card #1 top-left, then bottom-right (calculates origin, width, height, and resets gutters to 0).
-* **Full Grid:** Click Card #1 top-left, then bottom-right of the last card in the grid (divides bounding box across cols and rows).
+   * **Single Card #1:** Click Card #1 top-left, then bottom-right (calculates origin, width, height, and resets gutters to 0).
+   * **Full Grid:** Click Card #1 top-left, then bottom-right of the last card in the grid (divides bounding box across cols and rows).
 
 
 * **Direct Keyboard Nudge (Conflict-Free):**
