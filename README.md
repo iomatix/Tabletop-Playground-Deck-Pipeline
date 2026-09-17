@@ -306,8 +306,8 @@ When a deck exceeds single-sheet texture limits ($8192\text{ px}$ or 100 cards),
 2. Generates numbered atlas pairs: `<Deck>_01_front.png`, `<Deck>_01_back.png`, `<Deck>_02_front.png`...
 3. Writes a **single** `<GUID>Card.json` linking `ExtraFrontTextures` and `ExtraBackTextures`.
 4. Sets `"BackIndex": -3`:
-* In TTPG, `BackIndex: -1` mirrors the front face on the reverse side.
-* `BackIndex: -3` is the native engine flag for **Unique Backs (1:1 slot mapping)**. It instructs TTPG to map slot index $i$ on the front atlas to the exact corresponding slot $i$ on the back atlas across all primary and extra sheets.
+   * In TTPG, `BackIndex: -1` mirrors the front face on the reverse side.
+   * `BackIndex: -3` is the native engine flag for **Unique Backs (1:1 slot mapping)**. It instructs TTPG to map slot index $i$ on the front atlas to the exact corresponding slot $i$ on the back atlas across all primary and extra sheets.
 
 
 
