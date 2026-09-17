@@ -16,9 +16,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
 
-BASE_DIR: Final[Path] = Path(__file__).resolve().parent.parent
+if getattr(sys, "frozen", False):
+    BASE_DIR: Final[Path] = Path(sys.executable).resolve().parent
+    INTERNAL_DIR: Final[Path] = Path(__file__).resolve().parent.parent
+else:
+    BASE_DIR: Final[Path] = Path(__file__).resolve().parent.parent
+    INTERNAL_DIR: Final[Path] = BASE_DIR
+
 CONFIG_PATH: Final[Path] = BASE_DIR / "config.json"
-LOCALES_DIR: Final[Path] = BASE_DIR / "locales"
+LOCALES_DIR: Final[Path] = INTERNAL_DIR / "locales"
 TTPG_PACKAGES_DIR: Final[Path] = Path(os.path.expandvars(r"%LOCALAPPDATA%\TabletopPlayground\Packages"))
 
 PREVIEW_DPI: Final[int] = 100
