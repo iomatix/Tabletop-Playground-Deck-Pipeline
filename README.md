@@ -213,10 +213,10 @@ The global configuration governs default paths, raster DPI, filename matching ru
 
 
 * **`grid`**: PDF coordinate geometry measured in standard PostScript points ($1\text{ pt} = \frac{1}{72}\text{ inch}$):
-* `cols` / `rows`: Grid cells per page.
-* `card_width_pt` / `card_height_pt`: Card cut boundaries.
-* `origin_x_pt` / `origin_y_pt`: Margin offsets from the origin.
-* `gutter_x_pt` / `gutter_y_pt`: Spacing between adjacent cards.
+   * `cols` / `rows`: Grid cells per page.
+   * `card_width_pt` / `card_height_pt`: Card cut boundaries.
+   * `origin_x_pt` / `origin_y_pt`: Margin offsets from the origin.
+   * `gutter_x_pt` / `gutter_y_pt`: Spacing between adjacent cards.
 
 
 
