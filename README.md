@@ -207,9 +207,9 @@ The global configuration governs default paths, raster DPI, filename matching ru
 * **`model`**: `"Rounded"` (playing cards) or `"Square"` (tiles, manuals, full-page sheets).
 * **`thickness_cm`**: Physical card thickness in centimeters (default: `0.05` for cards, `0.03` for guidebooks).
 * **`duplex_flip`**: Duplex binding transform, dependent on PDF page orientation (Portrait vs. Landscape):
-* `"horizontal"`: Back side columns are mirrored (`cols - 1 - col`). Standard for portrait pages flipped along the long edge, or landscape pages flipped along the short edge.
-* `"vertical"`: Back side rows are mirrored (`rows - 1 - row`). Standard for "calendar-style" flips along the opposing edge.
-* `"none"`: Front and back use the exact same grid coordinates (for single-sided cards or uniform multi-page manuals).
+   * `"horizontal"`: Back side columns are mirrored (`cols - 1 - col`). Standard for portrait pages flipped along the long edge, or landscape pages flipped along the short edge.
+   * `"vertical"`: Back side rows are mirrored (`rows - 1 - row`). Standard for "calendar-style" flips along the opposing edge.
+   * `"none"`: Front and back use the exact same grid coordinates (for single-sided cards or uniform multi-page manuals).
 
 
 * **`grid`**: PDF coordinate geometry measured in standard PostScript points ($1\text{ pt} = \frac{1}{72}\text{ inch}$):
